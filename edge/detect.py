@@ -12,12 +12,27 @@ from edge.hal.camera import Camera
 from edge.hal.gps import GPS
 from edge.uploader import upload_report
 
-#   Config  
-DEFAULT_MODEL  = "yolo11m.pt"     # swap to best.pt after training
-CONFIDENCE     = 0.40 # minimum confidence to report
-INFER_EVERY_N  = 5 # run inference every N frames (saves CPU)
-SHOW_PREVIEW   = True # show annotated frame window
-UPLOAD_ENABLED = True # send reports to server
+# Config
+# Pretrained pothole model (HuggingFace: peterhdd/pothole-detection-yolov8)
+# Swap to custom trained model after training completes:
+#   DEFAULT_MODEL = r"e:\Pothole\runs\road_defect_medium\weights\best.pt"
+DEFAULT_MODEL  = r"e:\Pothole\pretrained\best.pt"
+CONFIDENCE     = 0.35             # slightly lower for pretrained model
+INFER_EVERY_N  = 5                # run inference every N frames (saves CPU)
+SHOW_PREVIEW   = True             # show annotated frame window
+UPLOAD_ENABLED = True             # send reports to server
+
+# Remap bad/generic class labels from pretrained models to SmartRoad names
+# peterhdd model uses '0' as class name instead of 'pothole'
+MODEL_CLASS_REMAP = {
+    "0": "pothole",       # peterhdd model fix
+    "pothole": "pothole",
+    "1": "road_crack",
+    "2": "broken_footpath",
+    "3": "broken_pole",
+    "4": "garbage_dump",
+    "5": "waterlogging",
+}
 
 # SmartRoad class names  
 SMARTROAD_CLASSES = {
@@ -48,9 +63,10 @@ def draw_detections(frame, results, model_names):
         conf    = float(box.conf[0])
         x1, y1, x2, y2 = map(int, box.xyxy[0])
 
-        # Use SmartRoad class name if custom model, else COCO name
-        name  = SMARTROAD_CLASSES.get(cls_id, model_names[cls_id])
-        color = CLASS_COLORS.get(name, (200, 200, 200))
+        # Resolve class name: remap bad labels (e.g. '0' -> 'pothole')
+        raw_name = model_names[cls_id]
+        name     = MODEL_CLASS_REMAP.get(raw_name, MODEL_CLASS_REMAP.get(str(cls_id), raw_name))
+        color    = CLASS_COLORS.get(name, (200, 200, 200))
 
         cv2.rectangle(annotated, (x1, y1), (x2, y2), color, 2)
         label = f"{name} {conf:.2f}"

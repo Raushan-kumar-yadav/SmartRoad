@@ -30,3 +30,6 @@ Thumbs.db
 *.swo
 .vscode/
 .idea/
+
+pretrained/
+smartorad.db
