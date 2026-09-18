@@ -12,26 +12,37 @@ from edge.hal.camera import Camera
 from edge.hal.gps import GPS
 from edge.uploader import upload_report
 
-# Config
-# Pretrained pothole model (HuggingFace: peterhdd/pothole-detection-yolov8)
-# Swap to custom trained model after training completes:
-#   DEFAULT_MODEL = r"e:\Pothole\runs\road_defect_medium\weights\best.pt"
-DEFAULT_MODEL  = r"e:\Pothole\pretrained\best.pt"
-CONFIDENCE     = 0.35             # slightly lower for pretrained model
-INFER_EVERY_N  = 5                # run inference every N frames (saves CPU)
-SHOW_PREVIEW   = True             # show annotated frame window
-UPLOAD_ENABLED = True             # send reports to server
 
-# Remap bad/generic class labels from pretrained models to SmartRoad names
-# peterhdd model uses '0' as class name instead of 'pothole'
+# Config
+# Best available pretrained model: ozair23/yolov8-road-damage-detector
+# Covers: pothole + alligator crack + transverse crack + longitudinal crack + other corruption
+# = 2 of our 6 SmartRoad classes (pothole, road_crack)
+#
+# TO UPGRADE after custom training finishes on raushanserver:
+#   DEFAULT_MODEL = r"e:\Pothole\pretrained\custom_best.pt"  <- all 6 classes!
+DEFAULT_MODEL  = r"e:\Pothole\pretrained\rdd\best.pt"
+CONFIDENCE     = 0.35
+INFER_EVERY_N  = 5
+SHOW_PREVIEW   = True
+UPLOAD_ENABLED = True
+
+# Map RDD2022 class names -> SmartRoad class names
+# RDD2022: alligator crack, transverse crack, longitudinal crack, other corruption, Pothole
 MODEL_CLASS_REMAP = {
-    "0": "pothole",       # peterhdd model fix
-    "pothole": "pothole",
-    "1": "road_crack",
-    "2": "broken_footpath",
-    "3": "broken_pole",
-    "4": "garbage_dump",
-    "5": "waterlogging",
+    # RDD2022 classes
+    "Pothole":            "pothole",
+    "pothole":            "pothole",
+    "alligator crack":    "road_crack",
+    "transverse crack":   "road_crack",
+    "longitudinal crack": "road_crack",
+    "other corruption":   "road_crack",
+    # Generic index fallback (peterhdd-style models)
+    "0":                  "pothole",
+    "1":                  "road_crack",
+    "2":                  "broken_footpath",
+    "3":                  "broken_pole",
+    "4":                  "garbage_dump",
+    "5":                  "waterlogging",
 }
 
 # SmartRoad class names  
@@ -63,7 +74,7 @@ def draw_detections(frame, results, model_names):
         conf    = float(box.conf[0])
         x1, y1, x2, y2 = map(int, box.xyxy[0])
 
-        # Resolve class name: remap bad labels (e.g. '0' -> 'pothole')
+         
         raw_name = model_names[cls_id]
         name     = MODEL_CLASS_REMAP.get(raw_name, MODEL_CLASS_REMAP.get(str(cls_id), raw_name))
         color    = CLASS_COLORS.get(name, (200, 200, 200))
