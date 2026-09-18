@@ -1,4 +1,3 @@
 ultralytics
-requests
-Pillow
 opencv-python
+requests
