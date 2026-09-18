@@ -8,18 +8,31 @@ from google.colab import drive
 drive.mount('/content/drive')
 
 # ── CELL 2: Install dependencies ─────────────────────────────
-!pip install ultralytics -q
+!pip install ultralytics gdown -q
 
-# ── CELL 3: Unzip dataset ─────────────────────────────────────
-import zipfile, os
+# ── CELL 3: Download & unzip dataset ────────────────────────
+import gdown, zipfile, os, pathlib
 
-ZIP_PATH    = "/content/drive/MyDrive/merged_dataset.zip"   # <- change if needed
+# File ID from your Google Drive share link
+FILE_ID    = "1epPhWCtbPYx3mN5j9bfRb8l3F0fYDIPE"
+ZIP_PATH   = "/content/merged_dataset.zip"
 EXTRACT_DIR = "/content/merged_dataset"
 
-print("Unzipping dataset...")
-with zipfile.ZipFile(ZIP_PATH, 'r') as z:
-    z.extractall(EXTRACT_DIR)
-print("Done!")
+# Download from Drive (works regardless of folder location)
+if not os.path.exists(ZIP_PATH):
+    print("Downloading dataset from Google Drive...")
+    gdown.download(id=FILE_ID, output=ZIP_PATH, quiet=False)
+else:
+    print("ZIP already downloaded, skipping.")
+
+# Unzip
+if not os.path.exists(EXTRACT_DIR):
+    print("Unzipping...")
+    with zipfile.ZipFile(ZIP_PATH, 'r') as z:
+        z.extractall(EXTRACT_DIR)
+    print("Done!")
+else:
+    print("Already extracted, skipping.")
 
 # Show structure
 for root, dirs, files in os.walk(EXTRACT_DIR):
@@ -32,7 +45,12 @@ for root, dirs, files in os.walk(EXTRACT_DIR):
 # ── CELL 4: Fix data.yaml paths for Colab ────────────────────
 import yaml, pathlib
 
-DATASET_DIR = pathlib.Path(EXTRACT_DIR) / "merged_dataset"
+# The zip extracts to: /content/merged_dataset/merged_dataset/
+# Auto-detect the correct path
+_base = pathlib.Path(EXTRACT_DIR)
+_candidates = [_base / "merged_dataset", _base]
+DATASET_DIR = next((p for p in _candidates if (p / "data.yaml").exists()), _base)
+print(f"Dataset found at: {DATASET_DIR}")
 
 # Rewrite paths to absolute Colab paths
 yaml_path = DATASET_DIR / "data.yaml"
