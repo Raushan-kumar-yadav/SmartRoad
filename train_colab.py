@@ -4,31 +4,18 @@ from google.colab import drive
 drive.mount('/content/drive')
 
 # ── CELL 2: Install dependencies ─────────────────────────────
-!pip install ultralytics gdown -q
+pip install ultralytics -q
 
-# ── CELL 3: Download & unzip dataset ────────────────────────
-import gdown, zipfile, os, pathlib
+# ── CELL 3: Unzip dataset ─────────────────────────────────────
+import zipfile, os
 
-# File ID from your Google Drive share link
-FILE_ID    = "1epPhWCtbPYx3mN5j9bfRb8l3F0fYDIPE"
-ZIP_PATH   = "/content/merged_dataset.zip"
+ZIP_PATH    = "/content/drive/MyDrive/merged_dataset.zip"  
 EXTRACT_DIR = "/content/merged_dataset"
 
-# Download from Drive (works regardless of folder location)
-if not os.path.exists(ZIP_PATH):
-    print("Downloading dataset from Google Drive...")
-    gdown.download(id=FILE_ID, output=ZIP_PATH, quiet=False)
-else:
-    print("ZIP already downloaded, skipping.")
-
-# Unzip
-if not os.path.exists(EXTRACT_DIR):
-    print("Unzipping...")
-    with zipfile.ZipFile(ZIP_PATH, 'r') as z:
-        z.extractall(EXTRACT_DIR)
-    print("Done!")
-else:
-    print("Already extracted, skipping.")
+print("Unzipping dataset...")
+with zipfile.ZipFile(ZIP_PATH, 'r') as z:
+    z.extractall(EXTRACT_DIR)
+print("Done!")
 
 # Show structure
 for root, dirs, files in os.walk(EXTRACT_DIR):
@@ -39,14 +26,9 @@ for root, dirs, files in os.walk(EXTRACT_DIR):
     print(f"{indent}{os.path.basename(root)}/  ({len(files)} files)")
 
 # ── CELL 4: Fix data.yaml paths for Colab ────────────────────
-import yaml, pathlib, os
+import yaml, pathlib
 
-# Auto-detect dataset root (handles single or double-nested zip)
-EXTRACT_DIR = "/content/merged_dataset"   # same as Cell 3
-_base = pathlib.Path(EXTRACT_DIR)
-_candidates = [_base / "merged_dataset", _base]
-DATASET_DIR = next((p for p in _candidates if (p / "data.yaml").exists()), _base)
-print(f"Dataset found at: {DATASET_DIR}")
+DATASET_DIR = pathlib.Path(EXTRACT_DIR) / "merged_dataset"
 
 # Rewrite paths to absolute Colab paths
 yaml_path = DATASET_DIR / "data.yaml"
@@ -69,12 +51,12 @@ with open(yaml_path, "w") as f:
 print("data.yaml updated:")
 print(yaml_path.read_text())
 
-#   CELL 5: Check GPU  
+# ── CELL 5: Check GPU ─────────────────────────────────────────
 import torch
 print(f"GPU: {torch.cuda.get_device_name(0) if torch.cuda.is_available() else 'NOT AVAILABLE - change runtime to GPU!'}")
 print(f"CUDA: {torch.version.cuda}")
 
-#   CELL 6: Train  
+# ── CELL 6: Train ─────────────────────────────────────────────
 from ultralytics import YOLO
 
 # Options: yolo11n (fastest/smallest) | yolo11s | yolo11m | yolo11l | yolo11x (best)
@@ -112,7 +94,7 @@ results = model.train(
 print("\nTraining complete!")
 print(f"Best weights: {results.save_dir}/weights/best.pt")
 
-#   CELL 7: Validate best model  
+# ── CELL 7: Validate best model ───────────────────────────────
 best_model = YOLO(f"{results.save_dir}/weights/best.pt")
 metrics = best_model.val(data=str(yaml_path))
 

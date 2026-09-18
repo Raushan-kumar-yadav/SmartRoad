@@ -1,11 +1,4 @@
-"""
-SmartRoad — Detections Router
-POST /report  - receive detection from edge node
-GET  /reports - list all reports
-GET  /reports/{id} - single report
-DELETE /reports/{id} - delete report
-GET  /stats - summary statistics
-"""
+ 
 import os
 import base64
 from datetime import datetime
@@ -33,49 +26,49 @@ CLASS_NAMES = {
 }
 
 
-# ── Pydantic Schemas ──────────────────────────────────────────
+ 
 class ReportIn(BaseModel):
     class_id:   int
     class_name: str
     confidence: float
-    lat:        Optional[float] = None
-    lon:        Optional[float] = None
-    source:     Optional[str]  = "edge"
-    bbox_x1:    Optional[float] = None
-    bbox_y1:    Optional[float] = None
-    bbox_x2:    Optional[float] = None
-    bbox_y2:    Optional[float] = None
-    image_b64:  Optional[str]  = None   # base64 encoded JPEG frame
-    notes:      Optional[str]  = None
+    lat: Optional[float] = None
+    lon: Optional[float] = None
+    source: Optional[str]  = "edge"
+    bbox_x1: Optional[float] = None
+    bbox_y1: Optional[float] = None
+    bbox_x2: Optional[float] = None
+    bbox_y2: Optional[float] = None
+    image_b64:  Optional[str]  = None  
+    notes: Optional[str]  = None
 
 
 class ReportOut(BaseModel):
-    id:         int
-    class_id:   int
+    id: int
+    class_id: int
     class_name: str
     confidence: float
-    lat:        Optional[float]
-    lon:        Optional[float]
-    source:     str
+    lat: Optional[float]
+    lon: Optional[float]
+    source: str
     image_path: Optional[str]
     created_at: datetime
-    bbox_x1:    Optional[float]
-    bbox_y1:    Optional[float]
-    bbox_x2:    Optional[float]
-    bbox_y2:    Optional[float]
-    notes:      Optional[str]
+    bbox_x1: Optional[float]
+    bbox_y1: Optional[float]
+    bbox_x2: Optional[float]
+    bbox_y2: Optional[float]
+    notes: Optional[str]
 
     class Config:
         from_attributes = True
 
 
 class StatsOut(BaseModel):
-    total:      int
-    by_class:   dict
-    last_24h:   int
+    total: int
+    by_class: dict
+    last_24h: int
 
 
-# ── Endpoints ─────────────────────────────────────────────────
+# Endpoints  
 @router.post("/report", response_model=ReportOut)
 def create_report(payload: ReportIn, db: Session = Depends(get_db)):
     """Receive a defect detection from edge node."""
@@ -94,15 +87,15 @@ def create_report(payload: ReportIn, db: Session = Depends(get_db)):
         class_id   = payload.class_id,
         class_name = payload.class_name,
         confidence = payload.confidence,
-        lat        = payload.lat,
-        lon        = payload.lon,
-        source     = payload.source or "edge",
+        lat = payload.lat,
+        lon = payload.lon,
+        source = payload.source or "edge",
         image_path = image_path,
-        bbox_x1    = payload.bbox_x1,
-        bbox_y1    = payload.bbox_y1,
-        bbox_x2    = payload.bbox_x2,
-        bbox_y2    = payload.bbox_y2,
-        notes      = payload.notes,
+        bbox_x1 = payload.bbox_x1,
+        bbox_y1 = payload.bbox_y1,
+        bbox_x2 = payload.bbox_x2,
+        bbox_y2 = payload.bbox_y2,
+        notes = payload.notes,
     )
     db.add(report)
     db.commit()

@@ -1,11 +1,4 @@
-"""
-SmartRoad — FastAPI Main Entry Point
-
-Run with:
-  uvicorn server.main:app --reload --host 0.0.0.0 --port 8000
-
-API Docs: http://localhost:8000/docs
-"""
+ 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
@@ -20,10 +13,10 @@ app = FastAPI(
     version="1.0.0",
 )
 
-# CORS — allow React dashboard + edge node
+# CORS  
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],      # tighten in production
+    allow_origins=["*"],      
     allow_methods=["*"],
     allow_headers=["*"],
 )
