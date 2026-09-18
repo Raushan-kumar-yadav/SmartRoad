@@ -1,0 +1,9 @@
+nc: 6
+names:
+  0: pothole
+  1: road_crack
+  2: broken_footpath
+  3: broken_pole
+  4: garbage_dump
+  5: waterlogging
+
