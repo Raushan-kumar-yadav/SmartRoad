@@ -43,10 +43,10 @@ for root, dirs, files in os.walk(EXTRACT_DIR):
     print(f"{indent}{os.path.basename(root)}/  ({len(files)} files)")
 
 # ── CELL 4: Fix data.yaml paths for Colab ────────────────────
-import yaml, pathlib
+import yaml, pathlib, os
 
-# The zip extracts to: /content/merged_dataset/merged_dataset/
-# Auto-detect the correct path
+# Auto-detect dataset root (handles single or double-nested zip)
+EXTRACT_DIR = "/content/merged_dataset"   # same as Cell 3
 _base = pathlib.Path(EXTRACT_DIR)
 _candidates = [_base / "merged_dataset", _base]
 DATASET_DIR = next((p for p in _candidates if (p / "data.yaml").exists()), _base)
