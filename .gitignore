@@ -1,0 +1,32 @@
+# ── Datasets (raw + extracted + zipped) ──────────────────────
+dataset/
+merged_dataset/
+merged_dataset.zip
+RDD2022/
+RDD2022.zip
+
+# ── Python cache ──────────────────────────────────────────────
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+
+# ── Model weights & training runs ────────────────────────────
+runs/
+*.pt
+*.onnx
+*.engine
+*_ncnn_model/
+
+# ── Scratch / temp scripts ────────────────────────────────────
+convert_and_merge.py
+merge_remaining.py
+
+# ── OS / editor junk ─────────────────────────────────────────
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+.vscode/
+.idea/
