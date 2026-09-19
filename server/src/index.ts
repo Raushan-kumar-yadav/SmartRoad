@@ -17,7 +17,8 @@ import { fileURLToPath } from "url";
 import detectionsRouter from "./routes/detections";
 import ticketsRouter    from "./routes/tickets";
 import dashboardRouter  from "./routes/dashboard";
-import liveRouter from "./routes/live";
+import liveRouter       from "./routes/live";
+import configRouter     from "./routes/config";
 
 const PORT = parseInt(process.env["PORT"] ?? "8000", 10);
 
@@ -44,6 +45,7 @@ app.use("/api", detectionsRouter);
 app.use("/api", ticketsRouter);
 app.use("/api", dashboardRouter);
 app.use("/api", liveRouter);
+app.use("/api", configRouter);
 
 app.get("/", (_req, res) => {
   res.json({

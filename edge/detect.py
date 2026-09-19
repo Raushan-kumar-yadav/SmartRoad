@@ -40,6 +40,7 @@ import threading
 import time
 from http.server import BaseHTTPRequestHandler, HTTPServer
 import json
+import urllib.request
 
 import cv2
 
@@ -240,6 +241,23 @@ def _enqueue_upload(**kwargs):
         print("[Upload] Queue full — report dropped (server too slow?)")
 
 
+def _fetch_server_config(server_url: str) -> dict:
+    """Fetch edge config from server. Returns {} on failure (use CLI defaults)."""
+    try:
+        req = urllib.request.Request(
+            f"{server_url}/api/config",
+            headers={"Accept": "application/json"},
+        )
+        with urllib.request.urlopen(req, timeout=3) as resp:
+            data = json.loads(resp.read().decode())
+            print(f"[Config] Loaded from server: source={data.get('cameraSource')} "
+                  f"conf={data.get('confidence')} inferEvery={data.get('inferEvery')}")
+            return data
+    except Exception as e:
+        print(f"[Config] Could not reach server ({e}) — using CLI defaults")
+        return {}
+
+
 #   Camera source helper  
 def _open_camera(source):
     """Open any camera source. Returns cv2.VideoCapture."""
@@ -268,6 +286,18 @@ def _open_camera(source):
 def run(args):
     uploader.SERVER_URL = args.server
 
+    # Fetch config from server (overrides CLI defaults for camera/model/conf)
+    srv_cfg = _fetch_server_config(args.server)
+    # Apply server config — CLI flags still take priority if user set them
+    if srv_cfg.get("cameraSource") and str(args.source) == "0":
+        args.source = srv_cfg["cameraSource"]
+        print(f"[Config] Using server camera source: {args.source}")
+    if srv_cfg.get("confidence") and args.conf == CONFIDENCE:
+        args.conf = float(srv_cfg["confidence"])
+    if srv_cfg.get("inferEvery") and args.infer_every == INFER_EVERY_N:
+        args.infer_every = int(srv_cfg["inferEvery"])
+    if srv_cfg.get("uploadEnabled") is False:
+        args.upload = False
     #  Start async upload worker
     upload_thread = threading.Thread(target=_upload_worker, daemon=True,
                                      name="upload-worker")

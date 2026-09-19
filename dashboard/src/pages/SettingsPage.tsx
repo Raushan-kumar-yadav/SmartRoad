@@ -1,0 +1,363 @@
+import { useState, useEffect } from 'react';
+
+const API = import.meta.env.VITE_API_URL ?? 'http://localhost:8000';
+
+interface EdgeConfig {
+  cameraSource:  string;
+  cameraLabel:   string;
+  modelPath:     string;
+  confidence:    number;
+  inferEvery:    number;
+  streamPort:    number;
+  uploadEnabled: boolean;
+  updatedAt?:    string;
+}
+
+interface TestResult {
+  reachable: boolean | null;
+  statusCode?: number;
+  contentType?: string;
+  error?: string;
+  note?: string;
+}
+
+// Camera presets
+const PRESETS = [
+  { label: 'USB Webcam (0)',    source: '0',                              icon: '📷', hint: 'Built-in or first USB camera' },
+  { label: 'USB Webcam (1)',    source: '1',                              icon: '📷', hint: 'Second USB camera' },
+  { label: 'IP Webcam (Phone)', source: 'http://192.168.1.x:8080/video', icon: '📱', hint: 'Android: install IP Webcam app' },
+  { label: 'DroidCam',          source: 'http://192.168.1.x:4747/video', icon: '📱', hint: 'Android: install DroidCam app' },
+  { label: 'RTSP Camera',       source: 'rtsp://user:pass@192.168.1.x/stream', icon: '🎥', hint: 'IP camera / NVR RTSP stream' },
+  { label: 'Video File',        source: 'road_clip.mp4',                 icon: '📂', hint: 'For testing — loops the file' },
+];
+
+export default function SettingsPage() {
+  const [config,   setConfig]   = useState<EdgeConfig | null>(null);
+  const [loading,  setLoading]  = useState(true);
+  const [saving,   setSaving]   = useState(false);
+  const [testing,  setTesting]  = useState(false);
+  const [testResult, setTestResult] = useState<TestResult | null>(null);
+  const [saved,    setSaved]    = useState(false);
+
+  // Local editable fields
+  const [source,    setSource]    = useState('0');
+  const [label,     setLabel]     = useState('USB Webcam (index 0)');
+  const [modelPath, setModelPath] = useState('');
+  const [conf,      setConf]      = useState(0.35);
+  const [every,     setEvery]     = useState(5);
+  const [port,      setPort]      = useState(8080);
+  const [upload,    setUpload]    = useState(true);
+
+  useEffect(() => {
+    void fetchConfig();
+  }, []);
+
+  async function fetchConfig() {
+    setLoading(true);
+    try {
+      const res  = await fetch(`${API}/api/config`);
+      const data = await res.json() as EdgeConfig;
+      setConfig(data);
+      setSource(data.cameraSource);
+      setLabel(data.cameraLabel);
+      setModelPath(data.modelPath);
+      setConf(data.confidence);
+      setEvery(data.inferEvery);
+      setPort(data.streamPort);
+      setUpload(data.uploadEnabled);
+    } catch { /* server may be offline */ }
+    setLoading(false);
+  }
+
+  function applyPreset(preset: typeof PRESETS[number]) {
+    setSource(preset.source);
+    setLabel(preset.label);
+    setTestResult(null);
+  }
+
+  async function testCamera() {
+    setTesting(true);
+    setTestResult(null);
+    try {
+      const url = `${API}/api/config/test?url=${encodeURIComponent(source)}`;
+      const res = await fetch(url);
+      const data = await res.json() as TestResult;
+      setTestResult(data);
+    } catch {
+      setTestResult({ reachable: false, error: 'Server unreachable' });
+    }
+    setTesting(false);
+  }
+
+  async function saveConfig() {
+    setSaving(true);
+    setSaved(false);
+    try {
+      const payload: Partial<EdgeConfig> = {
+        cameraSource: source,
+        cameraLabel:  label,
+        modelPath,
+        confidence:   conf,
+        inferEvery:   every,
+        streamPort:   port,
+        uploadEnabled: upload,
+      };
+      const res = await fetch(`${API}/api/config`, {
+        method:  'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body:    JSON.stringify(payload),
+      });
+      const data = await res.json() as { config: EdgeConfig };
+      setConfig(data.config);
+      setSaved(true);
+      setTimeout(() => setSaved(false), 3000);
+    } catch { /* offline */ }
+    setSaving(false);
+  }
+
+  const isHttpSource = source.startsWith('http://') || source.startsWith('https://');
+
+  return (
+    <div>
+      <div className="page-header">
+        <div>
+          <h2>Settings</h2>
+          <p>Configure edge device camera source and detection parameters</p>
+        </div>
+      </div>
+
+      {loading ? (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, color: 'var(--text-muted)', fontSize: 13 }}>
+          <div className="spinner" /> Loading config…
+        </div>
+      ) : (
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 320px', gap: 16, alignItems: 'start' }}>
+
+          {/* ── Left column ── */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+
+            {/* Camera Source */}
+            <div style={{ background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 'var(--radius-lg)', overflow: 'hidden' }}>
+              <div style={{ padding: '12px 16px', borderBottom: '1px solid var(--border)' }}>
+                <div style={{ fontSize: 13, fontWeight: 600 }}>Camera Source</div>
+                <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 2 }}>Select a preset or enter a custom URL</div>
+              </div>
+
+              {/* Presets */}
+              <div style={{ padding: 14, display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 8 }}>
+                {PRESETS.map(p => (
+                  <button
+                    key={p.source}
+                    onClick={() => applyPreset(p)}
+                    style={{
+                      background:   source === p.source ? 'var(--bg-popover)' : 'transparent',
+                      border:       `1px solid ${source === p.source ? 'var(--accent-blue)' : 'var(--border)'}`,
+                      borderRadius: 'var(--radius-sm)',
+                      padding:      '8px 10px',
+                      cursor:       'pointer',
+                      textAlign:    'left',
+                      transition:   'all 0.15s',
+                    }}
+                  >
+                    <div style={{ fontSize: 16, marginBottom: 3 }}>{p.icon}</div>
+                    <div style={{ fontSize: 11, fontWeight: 600, color: source === p.source ? 'var(--accent-blue)' : 'var(--text)' }}>{p.label}</div>
+                    <div style={{ fontSize: 10, color: 'var(--text-dim)', marginTop: 2 }}>{p.hint}</div>
+                  </button>
+                ))}
+              </div>
+
+              {/* Custom source input */}
+              <div style={{ padding: '0 14px 14px' }}>
+                <label style={{ fontSize: 11, color: 'var(--text-muted)', fontWeight: 500 }}>Custom URL / Index</label>
+                <div style={{ display: 'flex', gap: 8, marginTop: 5 }}>
+                  <input
+                    value={source}
+                    onChange={e => { setSource(e.target.value); setTestResult(null); }}
+                    placeholder="0 | http://192.168.1.x:8080/video | rtsp://..."
+                    style={{
+                      flex: 1, background: 'var(--bg-popover)', border: '1px solid var(--border)',
+                      borderRadius: 'var(--radius-sm)', padding: '7px 10px', fontSize: 12,
+                      color: 'var(--text)', fontFamily: 'monospace', outline: 'none',
+                    }}
+                  />
+                  <button
+                    className="btn btn-ghost btn-sm"
+                    onClick={() => void testCamera()}
+                    disabled={testing || !isHttpSource}
+                    title={!isHttpSource ? 'HTTP sources only — USB/RTSP must be tested locally' : 'Test connection'}
+                  >
+                    {testing ? <span className="spinner" style={{ width: 12, height: 12 }} /> : '⚡ Test'}
+                  </button>
+                </div>
+
+                {/* Label */}
+                <label style={{ fontSize: 11, color: 'var(--text-muted)', fontWeight: 500, display: 'block', marginTop: 10 }}>Display Label</label>
+                <input
+                  value={label}
+                  onChange={e => setLabel(e.target.value)}
+                  placeholder="e.g. Phone Camera (bedroom)"
+                  style={{
+                    width: '100%', boxSizing: 'border-box', marginTop: 5,
+                    background: 'var(--bg-popover)', border: '1px solid var(--border)',
+                    borderRadius: 'var(--radius-sm)', padding: '7px 10px', fontSize: 12,
+                    color: 'var(--text)', outline: 'none',
+                  }}
+                />
+
+                {/* Test result */}
+                {testResult && (
+                  <div style={{
+                    marginTop: 10, padding: '8px 10px', borderRadius: 'var(--radius-sm)', fontSize: 11,
+                    background: testResult.reachable ? 'rgba(34,197,94,0.08)' : testResult.reachable === null ? 'rgba(59,130,246,0.08)' : 'rgba(239,68,68,0.08)',
+                    border:     `1px solid ${testResult.reachable ? 'rgba(34,197,94,0.2)' : testResult.reachable === null ? 'rgba(59,130,246,0.2)' : 'rgba(239,68,68,0.2)'}`,
+                    color:      testResult.reachable ? 'var(--green)' : testResult.reachable === null ? 'var(--accent-blue)' : 'var(--red)',
+                  }}>
+                    {testResult.reachable === true  && `✅ Reachable — ${testResult.contentType ?? ''}`}
+                    {testResult.reachable === false  && `❌ ${testResult.error ?? 'Unreachable'}`}
+                    {testResult.reachable === null   && `ℹ️ ${testResult.note}`}
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Detection Parameters */}
+            <div style={{ background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 'var(--radius-lg)', overflow: 'hidden' }}>
+              <div style={{ padding: '12px 16px', borderBottom: '1px solid var(--border)' }}>
+                <div style={{ fontSize: 13, fontWeight: 600 }}>Detection Parameters</div>
+              </div>
+              <div style={{ padding: 14, display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+
+                {/* Confidence */}
+                <div>
+                  <label style={{ fontSize: 11, color: 'var(--text-muted)', fontWeight: 500 }}>
+                    Confidence Threshold — <strong style={{ color: 'var(--text)' }}>{(conf * 100).toFixed(0)}%</strong>
+                  </label>
+                  <input type="range" min={0.1} max={0.9} step={0.05} value={conf}
+                    onChange={e => setConf(parseFloat(e.target.value))}
+                    style={{ width: '100%', marginTop: 8, accentColor: 'var(--accent-blue)' }} />
+                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 9, color: 'var(--text-dim)', marginTop: 2 }}>
+                    <span>10% (sensitive)</span><span>90% (strict)</span>
+                  </div>
+                </div>
+
+                {/* Infer every N */}
+                <div>
+                  <label style={{ fontSize: 11, color: 'var(--text-muted)', fontWeight: 500 }}>
+                    Run YOLO every — <strong style={{ color: 'var(--text)' }}>{every} frames</strong>
+                  </label>
+                  <input type="range" min={1} max={30} step={1} value={every}
+                    onChange={e => setEvery(parseInt(e.target.value))}
+                    style={{ width: '100%', marginTop: 8, accentColor: 'var(--accent-blue)' }} />
+                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 9, color: 'var(--text-dim)', marginTop: 2 }}>
+                    <span>1 (max accuracy)</span><span>30 (saves CPU)</span>
+                  </div>
+                </div>
+
+                {/* Stream port */}
+                <div>
+                  <label style={{ fontSize: 11, color: 'var(--text-muted)', fontWeight: 500 }}>MJPEG Stream Port</label>
+                  <input type="number" value={port} onChange={e => setPort(parseInt(e.target.value))}
+                    style={{ width: '100%', boxSizing: 'border-box', marginTop: 5, background: 'var(--bg-popover)', border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', padding: '7px 10px', fontSize: 12, color: 'var(--text)', outline: 'none' }} />
+                </div>
+
+                {/* Upload toggle */}
+                <div>
+                  <label style={{ fontSize: 11, color: 'var(--text-muted)', fontWeight: 500, display: 'block' }}>Auto Upload Detections</label>
+                  <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
+                    {[true, false].map(v => (
+                      <button key={String(v)} onClick={() => setUpload(v)}
+                        className={`btn btn-sm ${upload === v ? 'btn-primary' : 'btn-ghost'}`}>
+                        {v ? '✅ Enabled' : '⛔ Disabled'}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Model path */}
+                <div style={{ gridColumn: '1 / -1' }}>
+                  <label style={{ fontSize: 11, color: 'var(--text-muted)', fontWeight: 500 }}>YOLO Model Path</label>
+                  <input value={modelPath} onChange={e => setModelPath(e.target.value)}
+                    placeholder="e.g. e:\Pothole\pretrained\rdd\best.pt"
+                    style={{ width: '100%', boxSizing: 'border-box', marginTop: 5, background: 'var(--bg-popover)', border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', padding: '7px 10px', fontSize: 11, color: 'var(--text)', fontFamily: 'monospace', outline: 'none' }} />
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* ── Right column — Summary + Save ── */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+
+            {/* Current config summary */}
+            <div style={{ background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 'var(--radius-lg)', padding: 14 }}>
+              <div style={{ fontSize: 12, fontWeight: 600, marginBottom: 10 }}>Active Config</div>
+              {config ? (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                  {[
+                    ['Camera',    config.cameraLabel],
+                    ['Source',    config.cameraSource],
+                    ['Conf',      `${(config.confidence * 100).toFixed(0)}%`],
+                    ['Infer',     `every ${config.inferEvery}f`],
+                    ['Port',      String(config.streamPort)],
+                    ['Upload',    config.uploadEnabled ? 'Yes' : 'No'],
+                  ].map(([k, v]) => (
+                    <div key={k} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>{k}</span>
+                      <span style={{ fontSize: 11, fontWeight: 500, fontFamily: 'monospace', maxWidth: 160, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{v}</span>
+                    </div>
+                  ))}
+                  {config.updatedAt && (
+                    <div style={{ fontSize: 10, color: 'var(--text-dim)', marginTop: 4, borderTop: '1px solid var(--border)', paddingTop: 6 }}>
+                      Saved {new Date(config.updatedAt).toLocaleString()}
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <div style={{ fontSize: 12, color: 'var(--text-dim)' }}>Server offline</div>
+              )}
+            </div>
+
+            {/* Save button */}
+            <button
+              className="btn btn-primary"
+              style={{ width: '100%', padding: '10px', fontSize: 13 }}
+              onClick={() => void saveConfig()}
+              disabled={saving}
+            >
+              {saving ? <><span className="spinner" style={{ width: 12, height: 12 }} /> Saving…</> : '💾 Save Config'}
+            </button>
+
+            {saved && (
+              <div style={{ padding: '8px 12px', background: 'rgba(34,197,94,0.1)', border: '1px solid rgba(34,197,94,0.2)', borderRadius: 'var(--radius-sm)', fontSize: 12, color: 'var(--green)', textAlign: 'center' }}>
+                ✅ Config saved — restart edge detect to apply
+              </div>
+            )}
+
+            {/* Quick start command */}
+            <div style={{ background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 'var(--radius-lg)', padding: 14 }}>
+              <div style={{ fontSize: 11, fontWeight: 600, marginBottom: 8 }}>Start Edge Detection</div>
+              <div style={{ fontSize: 10, color: 'var(--text-muted)', marginBottom: 8 }}>Uses saved config automatically:</div>
+              <code style={{ display: 'block', background: 'var(--bg-popover)', border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', padding: '8px 10px', fontSize: 10, color: 'var(--accent-blue)', wordBreak: 'break-all' }}>
+                npm run dev:full
+              </code>
+              <div style={{ fontSize: 10, color: 'var(--text-dim)', marginTop: 8 }}>Or with custom source:</div>
+              <code style={{ display: 'block', background: 'var(--bg-popover)', border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', padding: '8px 10px', fontSize: 10, color: 'var(--text-muted)', wordBreak: 'break-all', marginTop: 4 }}>
+                python -m edge.detect --source "{source}"
+              </code>
+            </div>
+
+            {/* Tips */}
+            <div style={{ background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 'var(--radius-lg)', padding: 14 }}>
+              <div style={{ fontSize: 11, fontWeight: 600, marginBottom: 8 }}>📱 Phone Camera Setup</div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 6, fontSize: 11, color: 'var(--text-muted)', lineHeight: 1.6 }}>
+                <div><strong style={{ color: 'var(--text)' }}>IP Webcam</strong> (Android)<br />Install free app → Start Server → use <code style={{ background: 'var(--bg-popover)', padding: '1px 4px', borderRadius: 3, fontSize: 10 }}>:8080/video</code></div>
+                <div><strong style={{ color: 'var(--text)' }}>DroidCam</strong> (Android/iOS)<br />Install app + PC client → use <code style={{ background: 'var(--bg-popover)', padding: '1px 4px', borderRadius: 3, fontSize: 10 }}>:4747/video</code></div>
+                <div><strong style={{ color: 'var(--text)' }}>Tip:</strong> Set phone resolution to 640×480, 15fps for best performance</div>
+              </div>
+            </div>
+          </div>
+
+        </div>
+      )}
+    </div>
+  );
+}

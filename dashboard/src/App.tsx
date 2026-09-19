@@ -6,8 +6,9 @@ import TicketCard from './components/TicketCard';
 import TicketDetailModal from './components/TicketDetailModal';
 import RaiseComplaintModal from './components/RaiseComplaintModal';
 import LivePage from './pages/LivePage';
+import SettingsPage from './pages/SettingsPage';
 
-type Page   = 'dashboard' | 'tickets' | 'live';
+type Page   = 'dashboard' | 'tickets' | 'live' | 'settings';
 type Filter = 'all' | 'open' | 'assigned' | 'in_progress' | 'resolved';
 
 function Spinner() {
@@ -117,6 +118,11 @@ export default function App() {
           <div className={`nav-item ${page === 'live' ? 'active' : ''}`} onClick={() => setPage('live')}>
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="3"/></svg>
             Live Feed
+          </div>
+
+          <div className={`nav-item ${page === 'settings' ? 'active' : ''}`} onClick={() => setPage('settings')}>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="3"/><path d="M19.07 4.93a10 10 0 010 14.14M4.93 4.93a10 10 0 000 14.14"/><path d="M12 2v2m0 16v2M2 12h2m16 0h2"/></svg>
+            Settings
           </div>
 
           <div style={{ height: 1, background: 'var(--border)', margin: '6px 10px' }} />
@@ -253,8 +259,8 @@ export default function App() {
             )}
           </>
         )}
-        {/* ── Live ── */}
-        {page === 'live' && <LivePage />}
+        {page === 'live'     && <LivePage />}
+        {page === 'settings' && <SettingsPage />}
       </main>
 
       {/* Modals */}
