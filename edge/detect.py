@@ -269,14 +269,14 @@ class MJPEGHandler(BaseHTTPRequestHandler):
                 })
                 boxes_info.append(((x1, y1, x2, y2), name, conf_v))
 
-            # Draw + return annotated image
-            annotated     = draw_detections(frame, boxes_info, lat=lat, lon=lon)
-            _, buf        = cv2.imencode(".jpg", annotated, [cv2.IMWRITE_JPEG_QUALITY, 80])
-            annotated_b64 = base64.b64encode(buf).decode()
+            # Draw annotated frame
+            annotated = draw_detections(frame, boxes_info, lat=lat, lon=lon)
+
+            # ── Push to MJPEG stream so Live Feed shows phone camera ──────────
+            _push_frame(annotated, detections=detections, lat=lat, lon=lon)
 
             self._json_response({
-                "detections":    detections,
-                "annotated_b64": annotated_b64,
+                "detections": detections,
                 "lat": lat, "lon": lon,
             })
 
