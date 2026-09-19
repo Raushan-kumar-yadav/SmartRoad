@@ -17,19 +17,20 @@ import { fileURLToPath } from "url";
 import detectionsRouter from "./routes/detections";
 import ticketsRouter    from "./routes/tickets";
 import dashboardRouter  from "./routes/dashboard";
+import liveRouter from "./routes/live";
 
 const PORT = parseInt(process.env["PORT"] ?? "8000", 10);
 
-// ── App ────────────────────────────────────────────────────────
-const app    = express();
+//   App  
+const app = express();
 const server = http.createServer(app);
-const io     = new SocketIOServer(server, {
+const io = new SocketIOServer(server, {
   cors: { origin: "*", methods: ["GET", "POST", "PATCH", "DELETE"] },
 });
 
 app.set("io", io);
 
-// ── Middleware ─────────────────────────────────────────────────
+//   Middleware  
 app.use(cors());
 app.use(express.json({ limit: "50mb" }));
 app.use(express.urlencoded({ extended: true }));
@@ -42,6 +43,7 @@ app.use("/images", express.static(imgDir));
 app.use("/api", detectionsRouter);
 app.use("/api", ticketsRouter);
 app.use("/api", dashboardRouter);
+app.use("/api", liveRouter);
 
 app.get("/", (_req, res) => {
   res.json({

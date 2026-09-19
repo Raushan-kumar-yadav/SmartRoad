@@ -5,8 +5,9 @@ import { api } from './api/client';
 import TicketCard from './components/TicketCard';
 import TicketDetailModal from './components/TicketDetailModal';
 import RaiseComplaintModal from './components/RaiseComplaintModal';
+import LivePage from './pages/LivePage';
 
-type Page   = 'dashboard' | 'tickets';
+type Page   = 'dashboard' | 'tickets' | 'live';
 type Filter = 'all' | 'open' | 'assigned' | 'in_progress' | 'resolved';
 
 function Spinner() {
@@ -111,6 +112,11 @@ export default function App() {
                 {openCount}
               </span>
             )}
+          </div>
+
+          <div className={`nav-item ${page === 'live' ? 'active' : ''}`} onClick={() => setPage('live')}>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="3"/></svg>
+            Live Feed
           </div>
 
           <div style={{ height: 1, background: 'var(--border)', margin: '6px 10px' }} />
@@ -247,6 +253,8 @@ export default function App() {
             )}
           </>
         )}
+        {/* ── Live ── */}
+        {page === 'live' && <LivePage />}
       </main>
 
       {/* Modals */}
