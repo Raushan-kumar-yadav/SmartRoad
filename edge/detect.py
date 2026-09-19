@@ -272,7 +272,7 @@ class MJPEGHandler(BaseHTTPRequestHandler):
             # Draw annotated frame
             annotated = draw_detections(frame, boxes_info, lat=lat, lon=lon)
 
-            # ── Push to MJPEG stream so Live Feed shows phone camera ──────────
+             
             _push_frame(annotated, detections=detections, lat=lat, lon=lon)
 
             self._json_response({

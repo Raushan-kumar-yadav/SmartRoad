@@ -28,10 +28,13 @@ def _smooth(prev: float, target: float, alpha: float = 0.12) -> float:
 
 class GPS:
     def __init__(self, port: str = "/dev/ttyUSB0", baud: int = 9600,
-                 mock_coords: tuple = None):
+                 mock_coords: tuple = None,
+                 min_speed: float = 20.0, max_speed: float = 50.0):
         self.port         = port
         self.baud         = baud
         self.mock_coords  = mock_coords or (28.6139, 77.2090)  # Connaught Place, Delhi
+        self.min_speed    = min_speed   # km/h
+        self.max_speed    = max_speed   # km/h
 
         self._lat     = None
         self._lon     = None
@@ -39,14 +42,18 @@ class GPS:
         self._running = False
         self._thread  = None
 
-        # Simulation state
+        # Simulation state — convert km/h → m/s
+        _min_mps = min_speed / 3.6
+        _max_mps = max_speed / 3.6
         self._sim_lat     = float(self.mock_coords[0])
         self._sim_lon     = float(self.mock_coords[1])
         self._heading_deg = random.uniform(0, 360)   # degrees clockwise from North
-        self._speed_mps   = random.uniform(8, 14)    # 30–50 km/h in m/s
+        self._speed_mps   = random.uniform(_min_mps, _max_mps)
         # Target values for smooth interpolation
         self._t_heading   = self._heading_deg
         self._t_speed     = self._speed_mps
+        self._min_mps     = _min_mps
+        self._max_mps     = _max_mps
 
     # ── Start ────────────────────────────────────────────────────────────────
     def start(self):
@@ -90,7 +97,7 @@ class GPS:
 
             # ── Speed variation (smooth) ─────────────────────────────────
             if random.random() < 0.3:
-                self._t_speed = random.uniform(5.5, 15.3)   # 20–55 km/h
+                self._t_speed = random.uniform(self._min_mps, self._max_mps)
             self._speed_mps = _smooth(self._speed_mps, self._t_speed, alpha=0.08)
 
             # ── Heading variation (smooth + occasional turn) ─────────────

@@ -23,15 +23,51 @@ const router = Router();
 const CONFIG_PATH = path.resolve(process.cwd(), "..", "edge.config.json");
 
 interface EdgeConfig {
-  cameraSource: string;        // "0" | "1" | "http://..." | "rtsp://..."
-  cameraLabel:  string;        // human label for UI
-  modelPath:    string;
-  confidence:   number;
-  inferEvery:   number;
-  streamPort:   number;
+  cameraSource:  string;
+  cameraLabel:   string;
+  modelPath:     string;
+  confidence:    number;
+  inferEvery:    number;
+  streamPort:    number;
   uploadEnabled: boolean;
-  updatedAt:    string;
+  updatedAt:     string;
+  gps: {
+    mode:        "simulate" | "serial";
+    startLat:    number;
+    startLon:    number;
+    city:        string;
+    minSpeedKmh: number;
+    maxSpeedKmh: number;
+    serialPort:  string;
+    baudRate:    number;
+  };
+  gyro: {
+    mode:          "simulate" | "real";
+    updateHz:      number;
+    noiseLevel:    "low" | "medium" | "high";
+    enableEvents:  boolean;
+    serialPort:    string;
+  };
 }
+
+const DEFAULT_GPS = {
+  mode:        "simulate" as const,
+  startLat:    28.6139,
+  startLon:    77.2090,
+  city:        "New Delhi",
+  minSpeedKmh: 20,
+  maxSpeedKmh: 50,
+  serialPort:  "COM3",
+  baudRate:    9600,
+};
+
+const DEFAULT_GYRO = {
+  mode:         "simulate" as const,
+  updateHz:     50,
+  noiseLevel:   "medium" as const,
+  enableEvents: true,
+  serialPort:   "COM4",
+};
 
 const DEFAULT_CONFIG: EdgeConfig = {
   cameraSource:  "0",
@@ -42,13 +78,22 @@ const DEFAULT_CONFIG: EdgeConfig = {
   streamPort:    8080,
   uploadEnabled: true,
   updatedAt:     new Date().toISOString(),
+  gps:           { ...DEFAULT_GPS },
+  gyro:          { ...DEFAULT_GYRO },
 };
 
 function readConfig(): EdgeConfig {
   try {
     if (fs.existsSync(CONFIG_PATH)) {
-      const raw = fs.readFileSync(CONFIG_PATH, "utf-8");
-      return { ...DEFAULT_CONFIG, ...(JSON.parse(raw) as Partial<EdgeConfig>) };
+      const raw  = fs.readFileSync(CONFIG_PATH, "utf-8");
+      const saved = JSON.parse(raw) as Partial<EdgeConfig>;
+      return {
+        ...DEFAULT_CONFIG,
+        ...saved,
+        // Deep merge nested sections so new keys get defaults
+        gps:  { ...DEFAULT_GPS,  ...(saved.gps  ?? {}) },
+        gyro: { ...DEFAULT_GYRO, ...(saved.gyro ?? {}) },
+      };
     }
   } catch {
     // fall through to default
