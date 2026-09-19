@@ -74,7 +74,7 @@ export default function LivePage() {
 
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 280px', gap: 16, alignItems: 'start' }}>
 
-        {/* ── Video Feed ── */}
+        {/*   Video Feed   */}
         <div style={{ background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 'var(--radius-lg)', overflow: 'hidden' }}>
           <div style={{ padding: '10px 14px', borderBottom: '1px solid var(--border)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
             <span style={{ fontSize: 12, fontWeight: 500 }}>Camera Feed</span>
@@ -107,7 +107,7 @@ export default function LivePage() {
           )}
         </div>
 
-        {/* ── Info Panel ── */}
+        {/* Info Panel   */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
 
           {/* GPS */}
@@ -165,10 +165,10 @@ export default function LivePage() {
             <div style={{ fontSize: 10, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: 8, fontWeight: 500 }}>Stream Info</div>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
               {[
-                ['FPS',     status?.fps?.toFixed(1) ?? '—'],
+                ['FPS', status?.fps?.toFixed(1) ?? '—'],
                 ['Quality', '640×360'],
-                ['Format',  'MJPEG'],
-                ['Port',    '8080'],
+                ['Format', 'MJPEG'],
+                ['Port', '8080'],
               ].map(([l, v]) => (
                 <div key={l}>
                   <div style={{ fontSize: 9, color: 'var(--text-dim)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>{l}</div>
