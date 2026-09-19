@@ -101,4 +101,54 @@ router.get("/config/test", (req: Request, res: Response) => {
   testReq.on("timeout", () => { testReq.destroy(); res.json({ reachable: false, error: "Timeout" }); });
 });
 
+// GET /api/config/browse-videos — scan local filesystem for video files
+router.get("/config/browse-videos", (_req: Request, res: Response) => {
+  const VIDEO_EXTS = new Set([".mp4", ".avi", ".mov", ".mkv", ".webm", ".ts", ".mts", ".m4v", ".wmv"]);
+  const os = require("os") as typeof import("os");
+  const home = os.homedir();
+
+  const searchDirs: string[] = [
+    path.join(home, "Desktop"),
+    path.join(home, "Videos"),
+    path.join(home, "Documents"),
+    path.join(home, "Downloads"),
+    path.join(home, "Pictures"),
+    // Workspace root
+    path.resolve(process.cwd(), ".."),
+    path.resolve(process.cwd(), "..", "simulation"),
+  ];
+
+  const videos: Array<{ path: string; name: string; sizeKb: number; dir: string }> = [];
+
+  function scanDir(dir: string, depth = 0) {
+    if (depth > 2) return;
+    try {
+      const entries = fs.readdirSync(dir, { withFileTypes: true });
+      for (const e of entries) {
+        if (e.name.startsWith(".")) continue;
+        const full = path.join(dir, e.name);
+        if (e.isDirectory() && depth < 2) {
+          scanDir(full, depth + 1);
+        } else if (e.isFile() && VIDEO_EXTS.has(path.extname(e.name).toLowerCase())) {
+          try {
+            const stat = fs.statSync(full);
+            videos.push({
+              path: full,
+              name: e.name,
+              sizeKb: Math.round(stat.size / 1024),
+              dir: path.relative(home, dir) || dir,
+            });
+          } catch { /* skip */ }
+        }
+      }
+    } catch { /* dir not accessible */ }
+  }
+
+  for (const d of searchDirs) scanDir(d);
+
+  // Sort by name
+  videos.sort((a, b) => a.name.localeCompare(b.name));
+  res.json({ videos });
+});
+
 export default router;
