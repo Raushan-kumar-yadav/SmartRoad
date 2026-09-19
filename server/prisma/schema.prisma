@@ -1,0 +1,67 @@
+// This is your Prisma schema file
+// Learn more: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model DetectionReport {
+  id         Int      @id @default(autoincrement())
+  classId    Int
+  className  String
+  confidence Float
+  lat        Float?
+  lon        Float?
+  imagePath  String?
+  source     String   @default("edge")
+  bboxX1     Float?
+  bboxY1     Float?
+  bboxX2     Float?
+  bboxY2     Float?
+  notes      String?
+  createdAt  DateTime @default(now())
+
+  ticket     Ticket?
+
+  @@map("detection_reports")
+}
+
+model Ticket {
+  id          Int      @id @default(autoincrement())
+  ticketCode  String   @unique // e.g. TKT-2024-001
+  status      String   @default("open")    // open | assigned | in_progress | resolved
+  priority    String   @default("medium")  // critical | high | medium | low
+  wardName    String?
+  wardZone    String?
+  assignedTo  String?
+  resolvedAt  DateTime?
+  notes       String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  reportId    Int      @unique
+  report      DetectionReport @relation(fields: [reportId], references: [id])
+
+  notifications Notification[]
+
+  @@map("tickets")
+}
+
+model Notification {
+  id        Int      @id @default(autoincrement())
+  type      String   // email | webhook | sms
+  status    String   @default("sent")   // sent | failed
+  recipient String?
+  body      String?
+  sentAt    DateTime @default(now())
+
+  ticketId  Int
+  ticket    Ticket @relation(fields: [ticketId], references: [id])
+
+  @@map("notifications")
+}
