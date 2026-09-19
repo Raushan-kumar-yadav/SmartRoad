@@ -333,17 +333,27 @@ def run(args):
     print(f"[Detect] Preview: {'YES' if args.preview else 'NO (headless)'}")
     print("[Detect] Press Ctrl+C or Q to stop\n")
 
+    FAIL_LIMIT    = 30    # give up after N consecutive read failures
+    fail_streak   = 0
+
     try:
         while True:
             ret, raw_frame = cap.read()
             if not ret:
-                # For video files  
+                fail_streak += 1
+                if fail_streak >= FAIL_LIMIT:
+                    print(f"[Detect] ❌ Camera source unreachable after {FAIL_LIMIT} attempts.")
+                    print(f"[Detect]    Source: {args.source!r}")
+                    print(f"[Detect]    → Go to Settings tab and configure your camera source, then restart.")
+                    break
+                # For video files → loop back to start
                 if isinstance(args.source, str) and not args.source.startswith("http"):
-                    cap.set(cv2.CAP_PROP_POS_FRAMES, 0)  # loop video
+                    cap.set(cv2.CAP_PROP_POS_FRAMES, 0)
+                    fail_streak = 0
                     continue
-                print("[Detect] Frame read failed — retrying in 1s")
-                time.sleep(1)
+                time.sleep(0.1)
                 continue
+            fail_streak = 0   # reset on success
 
             frame_count  += 1
             fps_frame_cnt += 1
