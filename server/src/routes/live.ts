@@ -1,19 +1,25 @@
- 
-
-import { Router, Request, Response } from "express";
-import http from "http";
+﻿import { Router, Request, Response } from "express";
+import http  from "http";
+import https from "https";
 
 const router = Router();
 
- 
-const PI_HOST = process.env["PI_HOST"] ?? "localhost";
-const PI_PORT = parseInt(process.env["PI_STREAM_PORT"] ?? "8080", 10);
-const PI_TIMEOUT = 3000; // ms to wait for Pi health check
+const PI_HOST    = process.env["PI_HOST"]              ?? "localhost";
+const PI_PORT    = parseInt(process.env["PI_STREAM_PORT"] ?? "8080", 10);
+const PI_TIMEOUT = 3000;
 
-//   Check if Pi stream is reachable  
+// self-signed cert - disable verification for local-network edge device
+const TLS_OPTS = { rejectUnauthorized: false };
+
+/** GET via https (self-signed OK) */
+function piGet(opts: http.RequestOptions, cb: (res: http.IncomingMessage) => void) {
+  return https.get({ ...opts, ...TLS_OPTS } as https.RequestOptions, cb);
+}
+
+// Check if edge stream server is reachable
 function checkPiAlive(): Promise<boolean> {
   return new Promise((resolve) => {
-    const req = http.get(
+    const req = piGet(
       { hostname: PI_HOST, port: PI_PORT, path: "/health", timeout: PI_TIMEOUT },
       (res) => resolve(res.statusCode === 200)
     );
@@ -25,60 +31,43 @@ function checkPiAlive(): Promise<boolean> {
 // GET /api/live/status
 router.get("/live/status", async (_req: Request, res: Response) => {
   const alive = await checkPiAlive();
-
   if (!alive) {
-    res.json({
-      online: false,
-      streamUrl: null,
-      infoUrl: null,
-      message: `Edge device not reachable at ${PI_HOST}:${PI_PORT}`,
-    });
+    res.json({ online: false, streamUrl: null, infoUrl: null,
+               message: `Edge device not reachable at ${PI_HOST}:${PI_PORT}` });
     return;
   }
-
-  // Fetch metadata from Pi /info endpoint
   let info: Record<string, unknown> = {};
   try {
     const raw = await new Promise<string>((resolve, reject) => {
-      http.get({ hostname: PI_HOST, port: PI_PORT, path: "/info", timeout: 2000 }, (r) => {
+      piGet({ hostname: PI_HOST, port: PI_PORT, path: "/info", timeout: 2000 }, (r) => {
         let data = "";
         r.on("data", (c: string) => (data += c));
         r.on("end",  ()          => resolve(data));
       }).on("error", reject);
     });
     info = JSON.parse(raw) as Record<string, unknown>;
-  } catch {
-    // info stays empty  
-  }
+  } catch { /* info stays empty */ }
 
-  res.json({
-    online: true,
-    streamUrl: `/api/live/stream`,  // proxied through server
-    infoUrl:   `/api/live/info`,
-    piHost: PI_HOST,
-    piPort: PI_PORT,
-    ...info,
-  });
+  res.json({ online: true, streamUrl: `/api/live/stream`, infoUrl: `/api/live/info`,
+             piHost: PI_HOST, piPort: PI_PORT, ...info });
 });
 
-// GET /api/live/info  — proxies Pi /info JSON
+// GET /api/live/info  — proxies edge /info JSON
 router.get("/live/info", async (_req: Request, res: Response) => {
   const alive = await checkPiAlive();
   if (!alive) { res.status(503).json({ online: false }); return; }
-
-  http.get({ hostname: PI_HOST, port: PI_PORT, path: "/info", timeout: 2000 }, (piRes) => {
+  piGet({ hostname: PI_HOST, port: PI_PORT, path: "/info", timeout: 2000 }, (piRes) => {
     res.setHeader("Content-Type", "application/json");
     res.setHeader("Access-Control-Allow-Origin", "*");
     piRes.pipe(res);
   }).on("error", () => res.status(503).json({ online: false }));
 });
 
-// GET /api/live/stream   
+// GET /api/live/stream — MJPEG proxy (infinite stream, no timeout)
 router.get("/live/stream", (req: Request, res: Response) => {
-  const piReq = http.get(
-    { hostname: PI_HOST, port: PI_PORT, path: "/stream" },   // NO timeout — stream is infinite
+  const piReq = piGet(
+    { hostname: PI_HOST, port: PI_PORT, path: "/stream" },
     (piRes) => {
-      // Keep TCP connection alive
       piRes.socket?.setKeepAlive(true);
       res.setHeader("Content-Type",  piRes.headers["content-type"] ?? "multipart/x-mixed-replace; boundary=frame");
       res.setHeader("Cache-Control", "no-cache, no-store");
@@ -91,7 +80,6 @@ router.get("/live/stream", (req: Request, res: Response) => {
   piReq.on("error", () => {
     if (!res.headersSent) res.status(503).json({ error: "Edge device not reachable" });
   });
-  // Client tab closed → tear down the Pi connection immediately
   req.on("close", () => { piReq.destroy(); });
 });
 
