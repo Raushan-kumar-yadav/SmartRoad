@@ -203,28 +203,38 @@ class MJPEGHandler(BaseHTTPRequestHandler):
         done = threading.Event()
 
         def _probe():
-            for idx in range(8):
-                try:
-                    cap = cv2.VideoCapture(idx, cv2.CAP_DSHOW)   # CAP_DSHOW faster on Windows
-                    if cap.isOpened():
-                        w   = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH)  or 0)
-                        h   = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT) or 0)
-                        fps = cap.get(cv2.CAP_PROP_FPS) or 0
-                        cap.release()
-                        with lock:
-                            results.append({
-                                "index":  idx,
-                                "source": str(idx),
-                                "label":  f"Camera {idx}",
-                                "width":  w,
-                                "height": h,
-                                "fps":    round(fps, 1),
-                            })
-                    else:
-                        cap.release()
-                except Exception:
-                    pass
-            done.set()
+            import sys, os as _os
+            # Silence the cv2 obsensor / FFMPEG "index out of range" stderr spam
+            devnull = _os.open(_os.devnull, _os.O_WRONLY)
+            old_stderr = _os.dup(2)
+            _os.dup2(devnull, 2)
+            _os.close(devnull)
+            try:
+                for idx in range(8):
+                    try:
+                        cap = cv2.VideoCapture(idx)
+                        if cap.isOpened():
+                            w   = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH)  or 0)
+                            h   = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT) or 0)
+                            fps = cap.get(cv2.CAP_PROP_FPS) or 0
+                            cap.release()
+                            with lock:
+                                results.append({
+                                    "index":  idx,
+                                    "source": str(idx),
+                                    "label":  f"Camera {idx}",
+                                    "width":  w,
+                                    "height": h,
+                                    "fps":    round(fps, 1),
+                                })
+                        else:
+                            cap.release()
+                    except Exception:
+                        pass
+            finally:
+                _os.dup2(old_stderr, 2)   # restore stderr
+                _os.close(old_stderr)
+                done.set()
 
         t = threading.Thread(target=_probe, daemon=True, name="cam-scan")
         t.start()
@@ -341,7 +351,7 @@ class MJPEGHandler(BaseHTTPRequestHandler):
         except (BrokenPipeError, ConnectionAbortedError, ConnectionResetError):
             return
         interval = 1.0 / STREAM_FPS
-        heartbeat_every = int(STREAM_FPS * 5)   # send keepalive every 5s
+        heartbeat_every = int(STREAM_FPS * 5)    
         ticks = 0
         while True:
             try:

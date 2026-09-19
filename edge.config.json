@@ -1,0 +1,10 @@
+﻿{
+    "cameraSource":  "0",
+    "cameraLabel":  "USB Webcam (index 0)",
+    "uploadEnabled":  true,
+    "confidence":  0.35,
+    "modelPath":  "e:\\Pothole\\pretrained\\rdd\\best.pt",
+    "streamPort":  8080,
+    "updatedAt":  "2026-09-19T14:30:20.5757494+05:30",
+    "inferEvery":  5
+}

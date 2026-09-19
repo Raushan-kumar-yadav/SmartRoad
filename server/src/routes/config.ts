@@ -17,8 +17,10 @@ import https from "https";
 
 const router = Router();
 
-// Config file lives next to server (e:\Pothole\edge.config.json)
-const CONFIG_PATH = path.resolve(__dirname, "../../../../edge.config.json");
+// Config file lives at workspace root (e:\Pothole\edge.config.json)
+// process.cwd() is always the directory where `npm run dev:server` was launched from
+// (i.e. e:\Pothole\server), so go one level up to reach the workspace root.
+const CONFIG_PATH = path.resolve(process.cwd(), "..", "edge.config.json");
 
 interface EdgeConfig {
   cameraSource: string;        // "0" | "1" | "http://..." | "rtsp://..."
