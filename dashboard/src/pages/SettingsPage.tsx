@@ -406,8 +406,6 @@ export default function SettingsPage() {
                     </span>
                   </div>
                 )}
-              </div>
-
 
                 {/* Label */}
                 <label style={{ fontSize: 11, color: 'var(--text-muted)', fontWeight: 500, display: 'block', marginTop: 10 }}>Display Label</label>
