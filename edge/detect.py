@@ -42,6 +42,8 @@ from http.server import BaseHTTPRequestHandler, HTTPServer
 from socketserver import ThreadingMixIn
 import json
 import socket
+import ssl
+import subprocess
 import urllib.request
 
 class ThreadingHTTPServer(ThreadingMixIn, HTTPServer):
@@ -326,7 +328,6 @@ class MJPEGHandler(BaseHTTPRequestHandler):
 def _get_local_ip() -> str:
     """Return the machine's LAN IP (the one phones on same WiFi can reach)."""
     try:
-        # Trick: connect UDP to 8.8.8.8 — no data sent, but OS picks the right interface
         s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         s.connect(("8.8.8.8", 80))
         ip = s.getsockname()[0]
@@ -336,24 +337,73 @@ def _get_local_ip() -> str:
         return "localhost"
 
 
+def _ensure_ssl_cert() -> tuple[str, str] | tuple[None, None]:
+    """Generate a self-signed TLS cert if one doesn't exist. Returns (cert, key) paths."""
+    edge_dir  = os.path.dirname(os.path.abspath(__file__))
+    cert_path = os.path.join(edge_dir, "server.crt")
+    key_path  = os.path.join(edge_dir, "server.key")
+    if os.path.exists(cert_path) and os.path.exists(key_path):
+        return cert_path, key_path
+    # openssl ships with Git for Windows; also available on Linux/macOS
+    openssl_candidates = [
+        "openssl",
+        r"C:\Program Files\Git\usr\bin\openssl.exe",
+        r"C:\Program Files (x86)\Git\usr\bin\openssl.exe",
+    ]
+    openssl_bin = None
+    for candidate in openssl_candidates:
+        try:
+            subprocess.run([candidate, "version"], capture_output=True, check=True)
+            openssl_bin = candidate
+            break
+        except (FileNotFoundError, subprocess.CalledProcessError):
+            continue
+    if not openssl_bin:
+        print("[SSL] openssl not found — serving HTTP only (camera needs Chrome flag)")
+        return None, None
+    try:
+        subprocess.run([
+            openssl_bin, "req", "-x509", "-newkey", "rsa:2048",
+            "-keyout", key_path, "-out", cert_path,
+            "-days", "365", "-nodes",
+            "-subj", "/CN=SmartRoadEdge",
+        ], check=True, capture_output=True)
+        print(f"[SSL] Self-signed cert generated → {cert_path}")
+        return cert_path, key_path
+    except Exception as e:
+        print(f"[SSL] Cert generation failed: {e} — falling back to HTTP")
+        return None, None
+
+
 def _start_stream_server(port: int):
-    """Start threaded MJPEG HTTP server — each client gets its own thread."""
+    """Start threaded HTTPS (or HTTP) server — each client gets its own thread."""
+    cert, key = _ensure_ssl_cert()
     srv = ThreadingHTTPServer(("0.0.0.0", port), MJPEGHandler)
-    t = threading.Thread(target=srv.serve_forever, daemon=True,
-                         name="mjpeg-server")
+    if cert and key:
+        ctx = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
+        ctx.load_cert_chain(certfile=cert, keyfile=key)
+        srv.socket = ctx.wrap_socket(srv.socket, server_side=True)
+        scheme = "https"
+    else:
+        scheme = "http"
+    t = threading.Thread(target=srv.serve_forever, daemon=True, name="mjpeg-server")
     t.start()
     lan_ip = _get_local_ip()
-    # Store in shared meta so /info returns it (Settings page reads this)
     with _frame_lock:
         _stream_meta["lan_ip"]     = lan_ip
         _stream_meta["port"]       = port
-        _stream_meta["gui_url"]    = f"http://{lan_ip}:{port}/"
-        _stream_meta["stream_url"] = f"http://{lan_ip}:{port}/stream"
-    print(f"[Stream] ─────────────────────────────────────")
-    print(f"[Stream] 📱 Open on phone  → http://{lan_ip}:{port}/")
-    print(f"[Stream] 💻 Local browser  → http://localhost:{port}/")
-    print(f"[Stream] 🎥 MJPEG stream   → http://{lan_ip}:{port}/stream")
-    print(f"[Stream] ─────────────────────────────────────")
+        _stream_meta["gui_url"]    = f"{scheme}://{lan_ip}:{port}/"
+        _stream_meta["stream_url"] = f"{scheme}://{lan_ip}:{port}/stream"
+    print(f"[Stream] ───────────────────────────────────")
+    print(f"[Stream] 📱 Open on phone  → {scheme}://{lan_ip}:{port}/")
+    print(f"[Stream] 💻 Local browser  → {scheme}://localhost:{port}/")
+    if scheme == "https":
+        print(f"[Stream] 🔒 HTTPS enabled  → accept cert warning in browser")
+    else:
+        print(f"[Stream] ⚠️  HTTP only — camera needs Chrome flag:")
+        print(f"[Stream]    chrome://flags/#unsafely-treat-insecure-origin-as-secure")
+        print(f"[Stream]    Add: http://{lan_ip}:{port}")
+    print(f"[Stream] ───────────────────────────────────")
 
 # ── Async upload worker ───────────────────────────────────────────────────────
 def _upload_worker():
