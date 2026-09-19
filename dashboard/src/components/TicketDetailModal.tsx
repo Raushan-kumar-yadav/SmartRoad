@@ -3,7 +3,7 @@ import { CLASS_EMOJI, STATUS_LABEL, type Ticket } from '../data/mockData';
 
 function timeAgo(iso: string): string {
   const diff = (Date.now() - new Date(iso).getTime()) / 1000;
-  if (diff < 60)    return `${Math.round(diff)}s ago`;
+  if (diff < 60) return `${Math.round(diff)}s ago`;
   if (diff < 3600)  return `${Math.round(diff / 60)}m ago`;
   if (diff < 86400) return `${Math.round(diff / 3600)}h ago`;
   return `${Math.round(diff / 86400)}d ago`;
@@ -71,11 +71,11 @@ export default function TicketDetailModal({ ticket, onClose, onCloseTicket }: Pr
           {/* Info Grid */}
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
             {([
-              ['Status',      <><span className={`status-dot ${ticket.status}`} style={{ display: 'inline-block' }} /> {STATUS_LABEL[ticket.status]}</>],
+              ['Status', <><span className={`status-dot ${ticket.status}`} style={{ display: 'inline-block' }} /> {STATUS_LABEL[ticket.status]}</>],
               ['Confidence',  `${(ticket.confidence * 100).toFixed(1)}%`],
-              ['Ward',        ticket.wardName],
+              ['Ward', ticket.wardName],
               ['Reported',    timeAgo(ticket.createdAt)],
-              ['GPS',         `${ticket.lat.toFixed(4)}, ${ticket.lon.toFixed(4)}`],
+              ['GPS', ticket.lat != null && ticket.lon != null ? `${ticket.lat.toFixed(4)}, ${ticket.lon.toFixed(4)}` : 'N/A'],
               ['Assigned To', ticket.assignedTo.split(' ').slice(-2).join(' ')],
             ] as [string, React.ReactNode][]).map(([label, val]) => (
               <div key={label} style={{ background: 'var(--bg-card)', borderRadius: 8, padding: '10px 14px', border: '1px solid var(--border)' }}>
