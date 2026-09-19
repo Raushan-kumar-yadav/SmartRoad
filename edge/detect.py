@@ -297,6 +297,13 @@ class MJPEGHandler(BaseHTTPRequestHandler):
             new_src = str(body.get("source", "")).strip()
             if not new_src:
                 self._json_response({"error": "source required"}, 400); return
+            # Reject phone/https URLs — phone streams via /analyze, not as a cv2 source
+            if new_src.startswith("https://") or new_src.startswith("http://"):
+                self._json_response({
+                    "ok": False,
+                    "error": "Phone camera streams via /analyze — no switch needed."
+                }, 400)
+                return
             _switch_source = new_src
             print(f"[Switch] Camera switch requested → {new_src!r}")
             self._json_response({"ok": True, "source": new_src})

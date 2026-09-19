@@ -310,7 +310,9 @@ export default function SettingsPage() {
                               </div>
                               <div style={{ fontSize: 10, color: 'var(--text-dim)', marginTop: 1 }}>{cam.hint}</div>
                             </div>
-                            {isActive ? (
+                            {cam.live ? (
+                              <span style={{ fontSize: 10, color: 'var(--green)', fontWeight: 700, flexShrink: 0, padding: '2px 7px', borderRadius: 999, background: 'rgba(34,197,94,0.12)', border: '1px solid rgba(34,197,94,0.3)' }}>● Streaming</span>
+                            ) : isActive ? (
                               <span style={{ fontSize: 10, color: 'var(--green)', fontWeight: 700, flexShrink: 0 }}>✓ Active</span>
                             ) : (
                               <button
