@@ -1,11 +1,4 @@
-"""
-SmartRoad — Camera HAL
-Supports:
-  - Webcam (USB)        : source=0
-  - Video file          : source="path/to/video.mp4"
-  - Phone via IP Webcam : source="http://192.168.1.x:8080/video"
-  - Phone via DroidCam  : source="http://192.168.1.x:4747/video"
-"""
+ 
 import cv2
 
 

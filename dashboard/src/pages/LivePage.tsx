@@ -41,7 +41,7 @@ export default function LivePage() {
 
   useEffect(() => {
     void fetchStatus();
-    // Poll status + detection info every 2s
+    // Poll status  
     intervalRef.current = setInterval(() => void fetchStatus(), 2000);
     return () => {
       if (intervalRef.current) clearInterval(intervalRef.current);
