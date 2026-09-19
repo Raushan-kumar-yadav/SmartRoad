@@ -41,6 +41,7 @@ import time
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from socketserver import ThreadingMixIn
 import json
+import socket
 import urllib.request
 
 class ThreadingHTTPServer(ThreadingMixIn, HTTPServer):
@@ -406,17 +407,31 @@ class MJPEGHandler(BaseHTTPRequestHandler):
             pass
 
 
+def _get_local_ip() -> str:
+    """Return the machine's LAN IP (the one phones on same WiFi can reach)."""
+    try:
+        # Trick: connect UDP to 8.8.8.8 — no data sent, but OS picks the right interface
+        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        s.connect(("8.8.8.8", 80))
+        ip = s.getsockname()[0]
+        s.close()
+        return ip
+    except Exception:
+        return "localhost"
+
+
 def _start_stream_server(port: int):
     """Start threaded MJPEG HTTP server — each client gets its own thread."""
     srv = ThreadingHTTPServer(("0.0.0.0", port), MJPEGHandler)
     t = threading.Thread(target=srv.serve_forever, daemon=True,
                          name="mjpeg-server")
     t.start()
-    print(f"[Stream] 📱 Mobile GUI  → http://localhost:{port}/")
-    print(f"[Stream] 🎥 MJPEG feed  → http://localhost:{port}/stream")
-    print(f"[Stream] ℹ️  Info API    → http://localhost:{port}/info")
-
-
+    lan_ip = _get_local_ip()
+    print(f"[Stream] ─────────────────────────────────────")
+    print(f"[Stream] 📱 Open on phone  → http://{lan_ip}:{port}/")
+    print(f"[Stream] 💻 Local browser  → http://localhost:{port}/")
+    print(f"[Stream] 🎥 MJPEG stream   → http://{lan_ip}:{port}/stream")
+    print(f"[Stream] ─────────────────────────────────────")
 
 # ── Async upload worker ───────────────────────────────────────────────────────
 def _upload_worker():
