@@ -49,6 +49,7 @@ class ThreadingHTTPServer(ThreadingMixIn, HTTPServer):
     daemon_threads = True
 
 import cv2
+import numpy as np
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
@@ -94,11 +95,13 @@ CLASS_COLORS = {
 #   Shared state (thread-safe)  
 _frame_lock = threading.Lock()
 _latest_jpeg      = None          # bytes — latest JPEG for MJPEG stream
+_model            = None          # loaded YOLO model (set after run() loads it)
 _stream_meta     = {
     "active": False, "fps": 0.0, "lat": None, "lon": None,
     "reports_sent": 0, "detections": [],
     "frame_count": 0, "start_time": time.time(),
     "lan_ip": None, "port": None, "gui_url": None, "stream_url": None,
+    "server_url": None,          # so mobile UI knows where to upload reports
 }
 _upload_queue    = queue.Queue(maxsize=20)   # (payload_dict) — async uploads
 
@@ -179,6 +182,77 @@ class MJPEGHandler(BaseHTTPRequestHandler):
         except (BrokenPipeError, ConnectionAbortedError, ConnectionResetError):
             pass
 
+    def do_POST(self):
+        """POST /analyze  — run YOLO on a submitted JPEG frame."""
+        try:
+            if self.path != "/analyze":
+                self.send_response(404); self.end_headers(); return
+
+            global _model
+            if _model is None:
+                self._json_response({"error": "Model not loaded yet"}, 503); return
+
+            length = int(self.headers.get("Content-Length", 0))
+            body   = json.loads(self.rfile.read(length).decode())
+
+            # Decode image
+            img_b64 = body.get("image_b64", "")
+            img_bytes = base64.b64decode(img_b64)
+            arr = np.frombuffer(img_bytes, dtype=np.uint8)
+            frame = cv2.imdecode(arr, cv2.IMREAD_COLOR)
+            if frame is None:
+                self._json_response({"error": "Invalid image"}, 400); return
+
+            lat = body.get("lat")
+            lon = body.get("lon")
+            conf_thresh = float(body.get("conf", CONFIDENCE))
+
+            # Run YOLO
+            results   = _model(frame, verbose=False, conf=conf_thresh)
+            boxes     = results[0].boxes
+            detections = []
+            boxes_info = []
+
+            for box in boxes:
+                cls_id = int(box.cls[0])
+                name   = _model.names.get(cls_id, str(cls_id))
+                conf_v = float(box.conf[0])
+                x1, y1, x2, y2 = map(int, box.xyxy[0])
+                detections.append({
+                    "class":      name,
+                    "confidence": round(conf_v, 3),
+                    "bbox":       [x1, y1, x2, y2],
+                })
+                boxes_info.append(((x1, y1, x2, y2), name, conf_v))
+
+            # Draw + return annotated image
+            annotated = draw_detections(frame, boxes_info, lat=lat, lon=lon)
+            _, buf = cv2.imencode(".jpg", annotated, [cv2.IMWRITE_JPEG_QUALITY, 80])
+            annotated_b64 = base64.b64encode(buf).decode()
+
+            self._json_response({
+                "detections":     detections,
+                "annotated_b64":  annotated_b64,
+                "lat": lat, "lon": lon,
+            })
+
+        except (BrokenPipeError, ConnectionAbortedError, ConnectionResetError):
+            pass
+        except Exception as e:
+            try:
+                self._json_response({"error": str(e)}, 500)
+            except Exception:
+                pass
+
+    def _json_response(self, data: dict, status: int = 200):
+        body = json.dumps(data).encode()
+        self.send_response(status)
+        self.send_header("Content-Type", "application/json")
+        self.send_header("Content-Length", str(len(body)))
+        self._cors()
+        self.end_headers()
+        self.wfile.write(body)
+
     def _serve_index(self):
         """Serve the mobile camera control UI."""
         html = b'''<!DOCTYPE html>
@@ -189,160 +263,224 @@ class MJPEGHandler(BaseHTTPRequestHandler):
 <title>SmartRoad Edge</title>
 <style>
   *{box-sizing:border-box;margin:0;padding:0}
-  body{background:#09090b;color:#fafafa;font-family:-apple-system,BlinkMacSystemFont,\'Segoe UI\',sans-serif;min-height:100dvh;display:flex;flex-direction:column}
-  header{display:flex;align-items:center;justify-content:space-between;padding:14px 16px;border-bottom:1px solid #27272a;background:#09090b;position:sticky;top:0;z-index:10}
-  .logo{font-size:15px;font-weight:700;letter-spacing:-.3px}  
-  .dot{width:8px;height:8px;border-radius:50%;background:#3f3f46;display:inline-block;margin-right:6px;transition:background .3s}
-  .dot.live{background:#22c55e;box-shadow:0 0 0 3px rgba(34,197,94,.2);animation:pulse 2s infinite}
-  @keyframes pulse{0%,100%{box-shadow:0 0 0 3px rgba(34,197,94,.2)}50%{box-shadow:0 0 0 6px rgba(34,197,94,.05)}}
-  .badge{font-size:10px;font-weight:600;padding:3px 8px;border-radius:999px;border:1px solid #27272a;color:#a1a1aa}
+  body{background:#09090b;color:#fafafa;font-family:-apple-system,BlinkMacSystemFont,\'Segoe UI\',sans-serif;min-height:100dvh;display:flex;flex-direction:column;overscroll-behavior:none}
+  header{display:flex;align-items:center;justify-content:space-between;padding:12px 16px;border-bottom:1px solid #27272a;background:#09090b;position:sticky;top:0;z-index:10}
+  .logo{font-size:15px;font-weight:700;letter-spacing:-.3px}
+  .dot{width:8px;height:8px;border-radius:50%;background:#3f3f46;display:inline-block;margin-right:5px;transition:background .3s}
+  .dot.live{background:#22c55e;box-shadow:0 0 0 3px rgba(34,197,94,.25);animation:pulse 2s infinite}
+  @keyframes pulse{0%,100%{box-shadow:0 0 0 3px rgba(34,197,94,.25)}50%{box-shadow:0 0 0 7px rgba(34,197,94,.05)}}
+  .badge{font-size:10px;font-weight:600;padding:2px 8px;border-radius:999px;border:1px solid #27272a;color:#71717a}
   .badge.live{border-color:rgba(34,197,94,.3);color:#22c55e;background:rgba(34,197,94,.08)}
-  
   #preview-wrap{position:relative;width:100%;background:#000;aspect-ratio:16/9;overflow:hidden}
-  #preview-wrap img{width:100%;height:100%;object-fit:cover;display:block}
+  canvas{width:100%;height:100%;display:block;object-fit:cover}
+  video{display:none}
   #no-cam{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;color:#52525b;font-size:13px}
-  #no-cam svg{width:48px;height:48px;stroke:#3f3f46}
-  #fps-badge{position:absolute;bottom:10px;right:10px;background:rgba(0,0,0,.7);color:#a1a1aa;font-size:10px;padding:3px 8px;border-radius:6px;font-family:monospace}
-  #gps-badge{position:absolute;bottom:10px;left:10px;background:rgba(0,0,0,.7);color:#a1a1aa;font-size:10px;padding:3px 8px;border-radius:6px;font-family:monospace}
-
-  .controls{display:flex;gap:10px;padding:14px 16px}
-  .btn{flex:1;padding:13px;border-radius:10px;border:none;font-size:14px;font-weight:600;cursor:pointer;transition:all .15s;display:flex;align-items:center;justify-content:center;gap:7px}
+  #no-cam svg{width:40px;height:40px;stroke:#3f3f46}
+  .hud{position:absolute;font-size:10px;padding:3px 8px;border-radius:6px;background:rgba(0,0,0,.7);font-family:monospace}
+  #hud-fps{top:8px;right:8px;color:#a1a1aa}
+  #hud-gps{bottom:8px;left:8px;color:#a1a1aa}
+  #hud-dets{top:8px;left:8px;color:#22c55e}
+  #spinner{position:absolute;inset:0;display:none;align-items:center;justify-content:center;background:rgba(0,0,0,.4)}
+  #spinner::after{content:\'\';width:26px;height:26px;border:3px solid #27272a;border-top-color:#22c55e;border-radius:50%;animation:spin .7s linear infinite}
+  @keyframes spin{to{transform:rotate(360deg)}}
+  .controls{display:flex;gap:8px;padding:12px 14px}
+  .btn{flex:1;padding:12px;border-radius:10px;border:none;font-size:14px;font-weight:600;cursor:pointer;transition:all .12s;display:flex;align-items:center;justify-content:center;gap:6px}
   .btn-start{background:#22c55e;color:#000}
   .btn-start:active{background:#16a34a;transform:scale(.97)}
   .btn-stop{background:#27272a;color:#fafafa;border:1px solid #3f3f46}
   .btn-stop:active{background:#18181b;transform:scale(.97)}
-  .btn:disabled{opacity:.4;cursor:not-allowed}
-
-  .stats{display:grid;grid-template-columns:1fr 1fr;gap:1px;background:#27272a;border-top:1px solid #27272a;border-bottom:1px solid #27272a}
-  .stat{background:#09090b;padding:12px 16px}
-  .stat-label{font-size:10px;color:#52525b;font-weight:500;text-transform:uppercase;letter-spacing:.5px}
-  .stat-value{font-size:18px;font-weight:700;margin-top:2px;font-family:monospace}
-  .stat-value.green{color:#22c55e}
-  
-  .detections{flex:1;overflow-y:auto;padding:12px 16px;display:flex;flex-direction:column;gap:8px}
-  .det-header{font-size:11px;color:#52525b;font-weight:600;text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px}
-  .det-item{display:flex;align-items:center;justify-content:space-between;background:#18181b;border:1px solid #27272a;border-radius:8px;padding:10px 12px}
+  .btn:disabled{opacity:.35;cursor:not-allowed}
+  .btn-flip{background:#18181b;border:1px solid #27272a;color:#a1a1aa;flex:0 0 48px;padding:0;font-size:20px}
+  .stats{display:grid;grid-template-columns:repeat(4,1fr);gap:1px;background:#27272a;border-top:1px solid #27272a;border-bottom:1px solid #27272a}
+  .stat{background:#09090b;padding:10px 12px}
+  .stat-label{font-size:9px;color:#52525b;font-weight:600;text-transform:uppercase;letter-spacing:.4px}
+  .stat-value{font-size:16px;font-weight:700;margin-top:2px;font-family:monospace}
+  .stat-value.g{color:#22c55e}
+  .detections{flex:1;overflow-y:auto;padding:10px 14px;display:flex;flex-direction:column;gap:6px}
+  .det-hdr{font-size:10px;color:#52525b;font-weight:600;text-transform:uppercase;letter-spacing:.5px;margin-bottom:2px}
+  .det-item{display:flex;align-items:center;justify-content:space-between;background:#18181b;border:1px solid #27272a;border-radius:8px;padding:9px 11px;animation:fadein .2s}
+  @keyframes fadein{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:none}}
   .det-name{font-size:13px;font-weight:600}
-  .det-conf{font-size:12px;color:#22c55e;font-family:monospace;font-weight:600}
-  .det-conf.med{color:#f59e0b}
-  .det-conf.low{color:#ef4444}
-  .empty{color:#3f3f46;font-size:13px;text-align:center;padding:20px}
-
-  .server-info{padding:12px 16px;font-size:11px;color:#3f3f46;text-align:center;border-top:1px solid #18181b}
+  .det-right{display:flex;align-items:center;gap:8px}
+  .det-conf{font-size:12px;font-family:monospace;font-weight:600}
+  .det-upload{font-size:10px;padding:2px 7px;border-radius:999px;background:rgba(34,197,94,.1);border:1px solid rgba(34,197,94,.2);color:#22c55e;cursor:pointer}
+  .empty{color:#3f3f46;font-size:13px;text-align:center;padding:16px}
+  .conf-hi{color:#22c55e}.conf-med{color:#f59e0b}.conf-lo{color:#ef4444}
+  .footer{padding:10px 14px;font-size:10px;color:#3f3f46;border-top:1px solid #18181b;display:flex;justify-content:space-between;align-items:center}
+  #upload-toast{position:fixed;bottom:20px;left:50%;transform:translateX(-50%) translateY(60px);background:#22c55e;color:#000;font-size:12px;font-weight:600;padding:8px 18px;border-radius:999px;opacity:0;transition:all .3s;pointer-events:none;z-index:100}
+  #upload-toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
 </style>
 </head>
 <body>
-
 <header>
   <div class="logo">&#x1F6E3; SmartRoad Edge</div>
-  <div>
-    <span class="dot" id="dot"></span>
-    <span class="badge" id="status-badge">Offline</span>
-  </div>
+  <div><span class="dot" id="dot"></span><span class="badge" id="badge">Offline</span></div>
 </header>
-
 <div id="preview-wrap">
-  <img id="stream-img" src="" alt="" style="display:none" crossorigin>
+  <canvas id="canvas"></canvas>
+  <video id="video" autoplay playsinline muted></video>
   <div id="no-cam">
     <svg viewBox="0 0 24 24" fill="none" stroke-width="1.5"><path d="M15 10l4.553-2.276A1 1 0 0121 8.723v6.554a1 1 0 01-1.447.894L15 14M3 8a2 2 0 012-2h10a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2V8z"/></svg>
-    <span id="no-cam-text">Press Start to begin</span>
+    <span id="no-cam-msg">Press Start</span>
   </div>
-  <span id="fps-badge" style="display:none">0 fps</span>
-  <span id="gps-badge" style="display:none">No GPS</span>
+  <div class="hud" id="hud-dets" style="display:none"></div>
+  <div class="hud" id="hud-fps"  style="display:none">-- fps</div>
+  <div class="hud" id="hud-gps"  style="display:none">GPS...</div>
+  <div id="spinner"></div>
 </div>
-
 <div class="controls">
-  <button class="btn btn-start" id="btn-start" onclick="startCam()">&#x25B6; Start Camera</button>
-  <button class="btn btn-stop" id="btn-stop" onclick="stopCam()" disabled>&#x25A0; Stop</button>
+  <button class="btn btn-start" id="btn-start" onclick="startCam()">&#x25B6; Start</button>
+  <button class="btn btn-flip"  onclick="flipCam()" title="Flip">&#x21C6;</button>
+  <button class="btn btn-stop"  id="btn-stop"  onclick="stopCam()" disabled>&#x25A0; Stop</button>
 </div>
-
 <div class="stats">
-  <div class="stat"><div class="stat-label">FPS</div><div class="stat-value" id="sv-fps">0</div></div>
-  <div class="stat"><div class="stat-label">Reports sent</div><div class="stat-value green" id="sv-reports">0</div></div>
-  <div class="stat"><div class="stat-label">Detections</div><div class="stat-value" id="sv-dets">0</div></div>
-  <div class="stat"><div class="stat-label">GPS</div><div class="stat-value" id="sv-gps" style="font-size:12px;margin-top:6px">-</div></div>
+  <div class="stat"><div class="stat-label">FPS</div><div class="stat-value" id="sv-fps">-</div></div>
+  <div class="stat"><div class="stat-label">Detections</div><div class="stat-value g" id="sv-dets">0</div></div>
+  <div class="stat"><div class="stat-label">Uploaded</div><div class="stat-value g" id="sv-sent">0</div></div>
+  <div class="stat"><div class="stat-label">Model</div><div class="stat-value" id="sv-model" style="font-size:10px;margin-top:4px">loading</div></div>
 </div>
-
 <div class="detections">
-  <div class="det-header">Live Detections</div>
+  <div class="det-hdr">Live Detections</div>
   <div id="det-list"><div class="empty">No detections yet</div></div>
 </div>
-
-<div class="server-info" id="server-info">SmartRoad Edge Device &#x2022; <span id="host-info"></span></div>
-
+<div class="footer">
+  <span id="gps-text">GPS: waiting...</span>
+  <span id="server-text">Server: -</span>
+</div>
+<div id="upload-toast">&#x2714; Sent!</div>
 <script>
-  let running = false;
-  let pollTimer = null;
-  const img = document.getElementById(\'stream-img\');
-  const noCam = document.getElementById(\'no-cam\');
-  const dot = document.getElementById(\'dot\');
-  const badge = document.getElementById(\'status-badge\');
+  const ANALYZE_FPS = 3;
+  const CONF = 0.35;
+  const JPEG_Q = 0.82;
+  let stream=null,loopId=null,facing=\'environment\',lastT=0,gpsPos=null,sentCount=0,busy=false,serverUrl=\'\';
+  const video=document.getElementById(\'video\');
+  const canvas=document.getElementById(\'canvas\');
+  const ctx=canvas.getContext(\'2d\');
 
-  document.getElementById(\'host-info\').textContent = location.host;
-
-  function startCam() {
-    running = true;
-    document.getElementById(\'btn-start\').disabled = true;
-    document.getElementById(\'btn-stop\').disabled = false;
-    img.src = \'/stream?t=\' + Date.now();
-    img.style.display = \'block\';
-    noCam.style.display = \'none\';
-    dot.classList.add(\'live\');
-    badge.textContent = \'Live\';
-    badge.classList.add(\'live\');
-    document.getElementById(\'fps-badge\').style.display = \'block\';
-    document.getElementById(\'gps-badge\').style.display = \'block\';
-    startPolling();
+  // Get /info to learn server URL + model status
+  async function refreshInfo(){
+    try{
+      const d=await fetch(\'/info\').then(r=>r.json());
+      if(d.server_url){ serverUrl=d.server_url; document.getElementById(\'server-text\').textContent=\'Server: \'+serverUrl; }
+      document.getElementById(\'sv-model\').textContent=d.gui_url?\'ready ✔\':\'loading\';
+    }catch{document.getElementById(\'sv-model\').textContent=\'offline\';}
   }
+  refreshInfo();
+  setInterval(refreshInfo,4000);
 
-  function stopCam() {
-    running = false;
-    img.src = \'\'; img.style.display = \'none\';
-    noCam.style.display = \'flex\';
-    document.getElementById(\'no-cam-text\').textContent = \'Stopped\';
-    document.getElementById(\'btn-start\').disabled = false;
-    document.getElementById(\'btn-stop\').disabled = true;
-    dot.classList.remove(\'live\');
-    badge.textContent = \'Offline\'; badge.classList.remove(\'live\');
-    document.getElementById(\'fps-badge\').style.display = \'none\';
-    document.getElementById(\'gps-badge\').style.display = \'none\';
-    if (pollTimer) clearInterval(pollTimer);
-  }
+  // GPS
+  navigator.geolocation&&navigator.geolocation.watchPosition(
+    p=>{gpsPos={lat:p.coords.latitude,lon:p.coords.longitude};
+        document.getElementById(\'gps-text\').textContent=\'GPS: \'+gpsPos.lat.toFixed(5)+\', \'+gpsPos.lon.toFixed(5);
+        document.getElementById(\'hud-gps\').textContent=gpsPos.lat.toFixed(4)+\',\'+gpsPos.lon.toFixed(4);},
+    ()=>{document.getElementById(\'gps-text\').textContent=\'GPS: unavailable\';},
+    {enableHighAccuracy:true,maximumAge:5000}
+  );
 
-  img.onerror = function() {
-    if (running) {
-      document.getElementById(\'no-cam-text\').textContent = \'No camera signal\';
-      noCam.style.display = \'flex\'; img.style.display = \'none\';
+  async function startCam(){
+    document.getElementById(\'btn-start\').disabled=true;
+    document.getElementById(\'no-cam-msg\').textContent=\'Opening camera...\';
+    try{
+      stream=await navigator.mediaDevices.getUserMedia({video:{facingMode:facing,width:{ideal:640},height:{ideal:480}},audio:false});
+      video.srcObject=stream;
+      await video.play();
+      canvas.width=video.videoWidth||640;
+      canvas.height=video.videoHeight||480;
+      document.getElementById(\'no-cam\').style.display=\'none\';
+      [\'hud-fps\',\'hud-gps\',\'hud-dets\'].forEach(id=>document.getElementById(id).style.display=\'block\');
+      document.getElementById(\'btn-stop\').disabled=false;
+      document.getElementById(\'dot\').classList.add(\'live\');
+      document.getElementById(\'badge\').textContent=\'Live\';
+      document.getElementById(\'badge\').classList.add(\'live\');
+      loopId=setInterval(captureAndAnalyze,1000/ANALYZE_FPS);
+    }catch(e){
+      document.getElementById(\'no-cam-msg\').textContent=\'Camera error: \'+e.message;
+      document.getElementById(\'btn-start\').disabled=false;
     }
-  };
-
-  function startPolling() {
-    fetchInfo();
-    pollTimer = setInterval(fetchInfo, 1500);
   }
 
-  function fetchInfo() {
-    fetch(\'/info\').then(r => r.json()).then(d => {
-      document.getElementById(\'sv-fps\').textContent = d.fps ?? 0;
-      document.getElementById(\'sv-reports\').textContent = d.reports_sent ?? 0;
-      const dets = d.detections || [];
-      document.getElementById(\'sv-dets\').textContent = dets.length;
-      // GPS
-      if (d.lat && d.lon) {
-        const g = d.lat.toFixed(4) + \', \' + d.lon.toFixed(4);
-        document.getElementById(\'sv-gps\').textContent = g;
-        document.getElementById(\'gps-badge\').textContent = \' GPS \' + g;
-      }
-      document.getElementById(\'fps-badge\').textContent = (d.fps ?? 0) + \' fps\';
-      // Detections list
-      const list = document.getElementById(\'det-list\');
-      if (!dets.length) { list.innerHTML = \'<div class="empty">No active detections</div>\'; return; }
-      list.innerHTML = dets.map(det => {
-        const c = det.confidence;
-        const cls = c >= 0.7 ? \'\' : c >= 0.5 ? \'med\' : \'low\';
-        return `<div class="det-item"><span class="det-name">${det.class}</span><span class="det-conf ${cls}">${(c*100).toFixed(0)}%</span></div>`;
-      }).join(\'\');
-    }).catch(() => {});
+  function stopCam(){
+    if(loopId){clearInterval(loopId);loopId=null;}
+    if(stream){stream.getTracks().forEach(t=>t.stop());stream=null;}
+    document.getElementById(\'no-cam\').style.display=\'flex\';
+    document.getElementById(\'no-cam-msg\').textContent=\'Stopped\';
+    [\'hud-fps\',\'hud-gps\',\'hud-dets\'].forEach(id=>document.getElementById(id).style.display=\'none\');
+    document.getElementById(\'btn-stop\').disabled=true;
+    document.getElementById(\'btn-start\').disabled=false;
+    document.getElementById(\'dot\').classList.remove(\'live\');
+    document.getElementById(\'badge\').textContent=\'Offline\';
+    document.getElementById(\'badge\').classList.remove(\'live\');
+  }
+
+  async function flipCam(){
+    facing=facing===\'environment\'?\'user\':\'environment\';
+    if(stream){stopCam();await startCam();}
+  }
+
+  async function captureAndAnalyze(){
+    if(busy||!stream||video.readyState<2)return;
+    busy=true;
+    const now=Date.now();
+    const fps=lastT?(1000/(now-lastT)).toFixed(1):\'-\';
+    lastT=now;
+    document.getElementById(\'hud-fps\').textContent=fps+\' fps\';
+    document.getElementById(\'sv-fps\').textContent=fps;
+    // Draw current video frame
+    ctx.drawImage(video,0,0,canvas.width,canvas.height);
+    const b64=canvas.toDataURL(\'image/jpeg\',JPEG_Q).split(\',\')[1];
+    try{
+      document.getElementById(\'spinner\').style.display=\'flex\';
+      const res=await fetch(\'/analyze\',{
+        method:\'POST\',
+        headers:{\'Content-Type\':\'application/json\'},
+        body:JSON.stringify({image_b64:b64,conf:CONF,lat:gpsPos?.lat??null,lon:gpsPos?.lon??null})
+      });
+      const data=await res.json();
+      if(data.error){busy=false;return;}
+      // Draw annotated image from YOLO
+      if(data.annotated_b64){
+        const img=new Image();
+        img.onload=()=>{ctx.drawImage(img,0,0,canvas.width,canvas.height);busy=false;};
+        img.src=\'data:image/jpeg;base64,\'+data.annotated_b64;
+      }else{busy=false;}
+      const dets=data.detections||[];
+      document.getElementById(\'sv-dets\').textContent=dets.length;
+      document.getElementById(\'hud-dets\').textContent=dets.length?dets.length+\' det\':\'\'
+      renderDets(dets,b64);
+    }catch(e){busy=false;}
+    finally{document.getElementById(\'spinner\').style.display=\'none\';}
+  }
+
+  function renderDets(dets,b64){
+    const list=document.getElementById(\'det-list\');
+    if(!dets.length){list.innerHTML=\'<div class="empty">No detections</div>\';return;}
+    window._dets=dets;window._b64=b64;
+    list.innerHTML=dets.map((d,i)=>{
+      const c=d.confidence;
+      const cls=c>=0.7?\'conf-hi\':c>=0.5?\'conf-med\':\'conf-lo\';
+      return `<div class="det-item"><span class="det-name">&#x1F6A7; ${d.class}</span><div class="det-right"><span class="det-conf ${cls}">${(c*100).toFixed(0)}%</span><span class="det-upload" onclick="upload(${i})">&#x2B06; Send</span></div></div>`;
+    }).join(\'\');
+  }
+
+  async function upload(idx){
+    const det=(window._dets||[])[idx];
+    if(!det||!serverUrl)return;
+    try{
+      await fetch(serverUrl.replace(/\\/$/,\'\')+\'/api/report\',{
+        method:\'POST\',
+        headers:{\'Content-Type\':\'application/json\'},
+        body:JSON.stringify({class:det.class,confidence:det.confidence,bbox:det.bbox,lat:gpsPos?.lat??null,lon:gpsPos?.lon??null,source:\'mobile-cam\',image_b64:window._b64||null})
+      });
+      sentCount++;
+      document.getElementById(\'sv-sent\').textContent=sentCount;
+      toast(\'&#x2714; Uploaded!\');
+    }catch{toast(\'&#x26A0; Upload failed\');}
+  }
+
+  function toast(msg){
+    const t=document.getElementById(\'upload-toast\');
+    t.innerHTML=msg;t.classList.add(\'show\');
+    setTimeout(()=>t.classList.remove(\'show\'),2500);
   }
 </script>
 </body></html>'''
@@ -530,9 +668,15 @@ def run(args):
 
     #  Load YOLO model
     print(f"[Detect] Loading model: {args.model}")
-    model = YOLO(args.model)
-    print(f"[Detect] Model loaded — {len(model.names)} classes: "
-          f"{list(model.names.values())}")
+    _yolo = YOLO(args.model)
+    global _model
+    _model = _yolo          # expose to /analyze endpoint immediately after load
+    print(f"[Detect] Model loaded ✔ — {len(_yolo.names)} classes: "
+          f"{list(_yolo.names.values())}")
+
+    # Store server URL in meta so mobile UI can upload reports directly
+    with _frame_lock:
+        _stream_meta["server_url"] = args.server
 
     #  Init GPS
     gps = GPS(mock_coords=(28.6139, 77.2090))
@@ -592,8 +736,8 @@ def run(args):
             lat, lon = gps.location()
 
             #   YOLO inference           
-            if frame_count % INFER_EVERY_N == 0:
-                results = model(raw_frame, verbose=False, conf=args.conf)
+            if frame_count % args.infer_every == 0:
+                results = _model(raw_frame, verbose=False, conf=args.conf)
                 boxes_info = []
 
                 for box in results[0].boxes:
