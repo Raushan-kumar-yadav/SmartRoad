@@ -155,8 +155,9 @@ class MJPEGHandler(BaseHTTPRequestHandler):
         pass  # silence access log
 
     def _cors(self):
-        self.send_header("Access-Control-Allow-Origin", "*")
-        self.send_header("Access-Control-Allow-Methods", "GET, OPTIONS")
+        self.send_header("Access-Control-Allow-Origin",  "*")
+        self.send_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
+        self.send_header("Access-Control-Allow-Headers", "Content-Type")
 
     def do_OPTIONS(self):
         try:
@@ -174,6 +175,8 @@ class MJPEGHandler(BaseHTTPRequestHandler):
                 self._serve_stream()
             elif self.path == "/info":
                 self._serve_info()
+            elif self.path == "/cameras":
+                self._serve_cameras()
             elif self.path == "/health":
                 self.send_response(200); self._cors(); self.end_headers()
                 self.wfile.write(b"ok")
@@ -183,6 +186,26 @@ class MJPEGHandler(BaseHTTPRequestHandler):
                 self.send_response(404); self.end_headers()
         except (BrokenPipeError, ConnectionAbortedError, ConnectionResetError):
             pass
+
+    def _serve_cameras(self):
+        """GET /cameras  — enumerate available cv2 camera indices."""
+        cameras = []
+        for idx in range(10):   # probe indices 0..9
+            cap = cv2.VideoCapture(idx)
+            if cap.isOpened():
+                w   = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+                h   = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+                fps = cap.get(cv2.CAP_PROP_FPS)
+                cameras.append({
+                    "index":  idx,
+                    "source": str(idx),
+                    "label":  f"Camera {idx}",
+                    "width":  w,
+                    "height": h,
+                    "fps":    round(fps, 1),
+                })
+                cap.release()
+        self._json_response({"cameras": cameras})
 
     def do_POST(self):
         """POST /analyze  — run YOLO on a submitted JPEG frame."""

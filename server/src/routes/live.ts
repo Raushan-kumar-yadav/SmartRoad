@@ -1,4 +1,4 @@
-﻿import { Router, Request, Response } from "express";
+import { Router, Request, Response } from "express";
 import http  from "http";
 import https from "https";
 
@@ -61,6 +61,17 @@ router.get("/live/info", async (_req: Request, res: Response) => {
     res.setHeader("Access-Control-Allow-Origin", "*");
     piRes.pipe(res);
   }).on("error", () => res.status(503).json({ online: false }));
+});
+
+// GET /api/live/cameras — enumerate cameras via edge /cameras endpoint
+router.get("/live/cameras", async (_req: Request, res: Response) => {
+  const alive = await checkPiAlive();
+  if (!alive) { res.status(503).json({ cameras: [], error: "Edge offline" }); return; }
+  piGet({ hostname: PI_HOST, port: PI_PORT, path: "/cameras", timeout: 15000 }, (piRes) => {
+    res.setHeader("Content-Type", "application/json");
+    res.setHeader("Access-Control-Allow-Origin", "*");
+    piRes.pipe(res);
+  }).on("error", () => res.status(503).json({ cameras: [], error: "Edge unreachable" }));
 });
 
 // GET /api/live/stream — MJPEG proxy (infinite stream, no timeout)
