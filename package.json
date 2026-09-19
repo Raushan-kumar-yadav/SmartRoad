@@ -4,13 +4,15 @@
   "private": true,
   "description": "SmartRoad — Road Defect Detection System",
   "scripts": {
-    "dev": "concurrently --names \"SERVER,UI\" --prefix-colors \"cyan,magenta\" \"npm run dev:server\" \"npm run dev:ui\"",
-    "dev:full": "concurrently --names \"SERVER,UI,EDGE\" --prefix-colors \"cyan,magenta,yellow\" \"npm run dev:server\" \"npm run dev:ui\" \"npm run dev:edge\"",
-    "dev:server": "cd server && npx tsx src/index.ts",
-    "dev:ui": "cd dashboard && npm run dev -- --port 5173",
-    "dev:edge": "python -m edge.detect --no-upload",
+    "dev":         "concurrently --names \"SERVER,UI\" --prefix-colors \"cyan,magenta\" \"npm run dev:server\" \"npm run dev:ui\"",
+    "dev:full":    "concurrently --names \"SERVER,UI,EDGE\" --prefix-colors \"cyan,magenta,yellow\" \"npm run dev:server\" \"npm run dev:ui\" \"npm run dev:edge\"",
+    "dev:server":  "cd server && npx tsx src/index.ts",
+    "dev:ui":      "cd dashboard && npm run dev -- --port 5173 --strictPort",
+    "dev:edge":    "\"C:\\Users\\raush\\AppData\\Local\\Programs\\Python\\Python312\\python.exe\" -m edge.detect --no-upload",
+    "dev:edge:upload": "\"C:\\Users\\raush\\AppData\\Local\\Programs\\Python\\Python312\\python.exe\" -m edge.detect",
+    "kill:ports":  "npx --yes kill-port 8000 5173",
     "install:all": "cd server && npm install && cd ../dashboard && npm install",
-    "build": "cd dashboard && npm run build"
+    "build":       "cd dashboard && npm run build"
   },
   "devDependencies": {
     "concurrently": "^9.0.1"
