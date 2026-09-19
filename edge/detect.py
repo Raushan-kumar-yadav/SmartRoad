@@ -188,24 +188,57 @@ class MJPEGHandler(BaseHTTPRequestHandler):
             pass
 
     def _serve_cameras(self):
-        """GET /cameras  — enumerate available cv2 camera indices."""
-        cameras = []
-        for idx in range(10):   # probe indices 0..9
-            cap = cv2.VideoCapture(idx)
-            if cap.isOpened():
-                w   = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
-                h   = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
-                fps = cap.get(cv2.CAP_PROP_FPS)
-                cameras.append({
-                    "index":  idx,
-                    "source": str(idx),
-                    "label":  f"Camera {idx}",
-                    "width":  w,
-                    "height": h,
-                    "fps":    round(fps, 1),
-                })
-                cap.release()
-        self._json_response({"cameras": cameras})
+        """GET /cameras — enumerate available cv2 camera indices (non-blocking)."""
+        # If a scan is already cached and recent (< 60s), return it immediately
+        with _frame_lock:
+            cached = _stream_meta.get("cameras_cache")
+            cache_ts = _stream_meta.get("cameras_ts", 0)
+        if cached is not None and (time.time() - cache_ts) < 60:
+            self._json_response({"cameras": cached, "cached": True})
+            return
+
+        # Run the slow cv2 probe in a daemon thread so HTTP server never blocks
+        results: list[dict] = []
+        lock = threading.Lock()
+        done = threading.Event()
+
+        def _probe():
+            for idx in range(8):
+                try:
+                    cap = cv2.VideoCapture(idx, cv2.CAP_DSHOW)   # CAP_DSHOW faster on Windows
+                    if cap.isOpened():
+                        w   = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH)  or 0)
+                        h   = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT) or 0)
+                        fps = cap.get(cv2.CAP_PROP_FPS) or 0
+                        cap.release()
+                        with lock:
+                            results.append({
+                                "index":  idx,
+                                "source": str(idx),
+                                "label":  f"Camera {idx}",
+                                "width":  w,
+                                "height": h,
+                                "fps":    round(fps, 1),
+                            })
+                    else:
+                        cap.release()
+                except Exception:
+                    pass
+            done.set()
+
+        t = threading.Thread(target=_probe, daemon=True, name="cam-scan")
+        t.start()
+        done.wait(timeout=20)   # wait up to 20s; return whatever found so far
+
+        with lock:
+            found = list(results)
+
+        # Cache results so next request is instant
+        with _frame_lock:
+            _stream_meta["cameras_cache"] = found
+            _stream_meta["cameras_ts"]    = time.time()
+
+        self._json_response({"cameras": found, "cached": False})
 
     def do_POST(self):
         """POST /analyze  — run YOLO on a submitted JPEG frame."""
@@ -301,11 +334,15 @@ class MJPEGHandler(BaseHTTPRequestHandler):
             self.send_response(200)
             self.send_header("Content-Type",
                              "multipart/x-mixed-replace; boundary=frame")
+            self.send_header("Cache-Control", "no-cache, no-store")
+            self.send_header("Connection",    "keep-alive")
             self._cors()
             self.end_headers()
         except (BrokenPipeError, ConnectionAbortedError, ConnectionResetError):
             return
         interval = 1.0 / STREAM_FPS
+        heartbeat_every = int(STREAM_FPS * 5)   # send keepalive every 5s
+        ticks = 0
         while True:
             try:
                 with _frame_lock:
@@ -316,6 +353,13 @@ class MJPEGHandler(BaseHTTPRequestHandler):
                         + frame + b"\r\n"
                     )
                     self.wfile.flush()
+                else:
+                    # No frame yet — send an MJPEG keepalive comment so the
+                    # connection stays alive in browsers and Node.js proxy
+                    ticks += 1
+                    if ticks % heartbeat_every == 0:
+                        self.wfile.write(b"--frame\r\n\r\n")
+                        self.wfile.flush()
                 time.sleep(interval)
             except (BrokenPipeError, ConnectionAbortedError, ConnectionResetError, OSError):
                 break  # client disconnected — exit cleanly
