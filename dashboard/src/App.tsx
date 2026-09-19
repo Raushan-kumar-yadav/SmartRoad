@@ -1,5 +1,7 @@
 import { useState } from 'react';
-import { MOCK_TICKETS, MOCK_STATS, CLASS_EMOJI, type Ticket } from './data/mockData';
+import { CLASS_EMOJI, type Ticket } from './data/mockData';
+import { useTickets, useStats } from './hooks/useData';
+import { api } from './api/client';
 import TicketCard from './components/TicketCard';
 import TicketDetailModal from './components/TicketDetailModal';
 import RaiseComplaintModal from './components/RaiseComplaintModal';
@@ -7,49 +9,79 @@ import RaiseComplaintModal from './components/RaiseComplaintModal';
 type Page   = 'dashboard' | 'tickets';
 type Filter = 'all' | 'open' | 'assigned' | 'in_progress' | 'resolved';
 
+function Spinner() {
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 8, color: 'var(--text-muted)', fontSize: 12, padding: '32px 0' }}>
+      <div className="spinner" />
+      Loading…
+    </div>
+  );
+}
+
+function ErrorMsg({ msg }: { msg: string }) {
+  return (
+    <div style={{ padding: '16px', background: 'var(--red-dim)', border: '1px solid rgba(239,68,68,0.25)', borderRadius: 'var(--radius)', fontSize: 12, color: 'var(--red)' }}>
+      ⚠ {msg} — Is the server running on port 8000?
+    </div>
+  );
+}
+
 export default function App() {
-  const [page, setPage] = useState<Page>('dashboard');
-  const [filter, setFilter] = useState<Filter>('all');
-  const [selectedTicket,  setSelectedTicket]  = useState<Ticket | null>(null);
-  const [showRaise, setShowRaise] = useState(false);
-  const [tickets, setTickets] = useState<Ticket[]>(MOCK_TICKETS);
-  const [toast, setToast] = useState<{ msg: string; type: string } | null>(null);
+  const [page,           setPage]           = useState<Page>('dashboard');
+  const [filter,         setFilter]         = useState<Filter>('all');
+  const [selectedTicket, setSelectedTicket] = useState<Ticket | null>(null);
+  const [showRaise,      setShowRaise]      = useState(false);
+  const [toast,          setToast]          = useState<{ msg: string; type: string } | null>(null);
+
+  // ── Live data ──
+  const { data: allTickets,  loading: tLoading, error: tError, refetch: refetchTickets } = useTickets();
+  const { data: stats,       loading: sLoading, error: sError, refetch: refetchStats }   = useStats();
 
   function showToast(msg: string, type = 'info') {
     setToast({ msg, type });
     setTimeout(() => setToast(null), 3000);
   }
 
-  function handleCloseTicket(id: number) {
-    setTickets(prev => prev.map(t => t.id === id ? { ...t, status: 'resolved' as const } : t));
-    showToast('Ticket resolved · ward officer notified', 'success');
+  async function handleCloseTicket(id: number) {
+    try {
+      await api.updateTicket(id, { status: 'resolved' });
+      refetchTickets();
+      refetchStats();
+      showToast('Ticket resolved · ward officer notified', 'success');
+    } catch {
+      showToast('Failed to close ticket', 'error');
+    }
   }
 
-  function handleRaiseSubmit() {
-    setTimeout(() => {
-      const t: Ticket = {
-        id: tickets.length + 1, ticketCode: `TKT-${Date.now()}`,
-        status: 'open', priority: 'medium', className: 'pothole',
-        confidence: 0.79, wardName: 'New Delhi', wardZone: 'new_delhi',
-        assignedTo: 'Officer New Delhi', lat: 28.6139, lon: 77.2090,
-        imagePath: null, createdAt: new Date().toISOString(),
-        notes: 'Manually raised', reportCount: 1,
-      };
-      setTickets(prev => [t, ...prev]);
+  async function handleRaiseSubmit(data: { category: string; description: string; gps: { lat: string; lon: string } | null }) {
+    try {
+      await api.submitReport({
+        class_name:  data.category,
+        confidence:  0.0,   // manual — no AI score
+        lat:         data.gps ? parseFloat(data.gps.lat) : undefined,
+        lon:         data.gps ? parseFloat(data.gps.lon) : undefined,
+        notes:       data.description || 'Manually raised',
+      });
+      refetchTickets();
+      refetchStats();
       showToast('Complaint raised · ticket created', 'success');
       setShowRaise(false);
-    }, 2000);
+    } catch {
+      showToast('Failed to submit complaint', 'error');
+      setShowRaise(false);
+    }
   }
 
-  const filtered = filter === 'all' ? tickets : tickets.filter(t => t.status === filter);
-  const openCount = tickets.filter(t => t.status === 'open').length;
+  const tickets     = allTickets ?? [];
+  const filtered    = filter === 'all' ? tickets : tickets.filter(t => t.status === filter);
+  const openCount     = tickets.filter(t => t.status === 'open').length;
   const criticalCount = tickets.filter(t => t.priority === 'critical').length;
   const resolvedCount = tickets.filter(t => t.status === 'resolved').length;
 
   return (
     <div className="layout">
 
-       
+      {/* ── Sidebar ── */}
       <aside className="sidebar">
         <div className="sidebar-logo">
           <h1>SmartRoad</h1>
@@ -74,25 +106,28 @@ export default function App() {
           <div className={`nav-item ${page === 'tickets' ? 'active' : ''}`} onClick={() => setPage('tickets')}>
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"/></svg>
             All Tickets
-            {openCount > 0 && <span style={{ marginLeft: 'auto', background: 'var(--red-dim)', color: 'var(--red)', fontSize: 10, fontWeight: 600, padding: '1px 6px', borderRadius: 10 }}>{openCount}</span>}
+            {openCount > 0 && (
+              <span style={{ marginLeft: 'auto', background: 'var(--red-dim)', color: 'var(--red)', fontSize: 10, fontWeight: 600, padding: '1px 6px', borderRadius: 10 }}>
+                {openCount}
+              </span>
+            )}
           </div>
 
-          <div className="sep" style={{ margin: '6px 10px' }} />
-
+          <div style={{ height: 1, background: 'var(--border)', margin: '6px 10px' }} />
           <div className="nav-section-label">Actions</div>
+
           <div className="nav-item" onClick={() => setShowRaise(true)}>
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 4v16m8-8H4" strokeLinecap="round"/></svg>
             Raise Complaint
           </div>
         </nav>
 
-        {/* Sidebar stats */}
         <div className="sidebar-stats">
           {([
-            ['Open',     openCount,     'var(--orange)'],
-            ['Critical', criticalCount, 'var(--red)'],
-            ['Resolved', resolvedCount, 'var(--green)'],
-            ['Total',    tickets.length,'var(--text-muted)'],
+            ['Open',     openCount,             'var(--orange)'],
+            ['Critical', criticalCount,         'var(--red)'],
+            ['Resolved', resolvedCount,         'var(--green)'],
+            ['Total',    tickets.length,        'var(--text-muted)'],
           ] as [string, number, string][]).map(([l, v, c]) => (
             <div key={l} className="sidebar-stat">
               <div className="sidebar-stat-label">{l}</div>
@@ -113,37 +148,42 @@ export default function App() {
               <p>Road defect detection · Delhi NCR</p>
             </div>
 
-            {/* Stats */}
+            {sError && <ErrorMsg msg={sError} />}
+
             <div className="stats-grid">
               {[
-                { label: 'Total Reports',  value: MOCK_STATS.total,               icon: '📋', color: 'var(--text)' },
-                { label: 'Open',           value: MOCK_STATS.openTickets,         icon: '🔓', color: 'var(--orange)' },
-                { label: 'Resolved',       value: MOCK_STATS.resolvedTickets,     icon: '✓',  color: 'var(--green)' },
-                { label: 'Last 24h',       value: MOCK_STATS.last24h,             icon: '⏱',  color: 'var(--accent-blue)' },
-                { label: 'Critical',       value: MOCK_STATS.byPriority.critical, icon: '!',  color: 'var(--red)' },
+                { label: 'Total Reports', value: stats?.total          ?? '—', icon: '📋', color: 'var(--text)' },
+                { label: 'Open',          value: stats?.openTickets    ?? '—', icon: '🔓', color: 'var(--orange)' },
+                { label: 'Resolved',      value: stats?.resolvedTickets ?? '—', icon: '✓',  color: 'var(--green)' },
+                { label: 'Last 24h',      value: stats?.last24h        ?? '—', icon: '⏱',  color: 'var(--accent-blue)' },
+                { label: 'Critical',      value: stats?.byPriority?.critical ?? '—', icon: '!', color: 'var(--red)' },
               ].map(s => (
                 <div className="stat-card" key={s.label}>
                   <div className="stat-card-label">{s.icon} {s.label}</div>
-                  <div className="stat-card-value" style={{ color: s.color }}>{s.value}</div>
+                  <div className="stat-card-value" style={{ color: s.color }}>
+                    {sLoading ? <div className="spinner" style={{ width: 16, height: 16 }} /> : s.value}
+                  </div>
                 </div>
               ))}
             </div>
 
-            {/* By type */}
-            <div className="section">
-              <div className="section-title">Defects by type</div>
-              <div className="class-grid">
-                {Object.entries(MOCK_STATS.byClass).map(([cls, count]) => (
-                  <div className="class-chip" key={cls}>
-                    <span className="class-chip-emoji">{CLASS_EMOJI[cls] ?? '📋'}</span>
-                    <div>
-                      <div className="class-chip-count">{count}</div>
-                      <div className="class-chip-label">{cls.replace(/_/g, ' ')}</div>
+            {/* By defect type */}
+            {stats?.byClass && Object.keys(stats.byClass).length > 0 && (
+              <div className="section">
+                <div className="section-title">Defects by type</div>
+                <div className="class-grid">
+                  {Object.entries(stats.byClass).map(([cls, count]) => (
+                    <div className="class-chip" key={cls}>
+                      <span className="class-chip-emoji">{CLASS_EMOJI[cls] ?? '📋'}</span>
+                      <div>
+                        <div className="class-chip-count">{count}</div>
+                        <div className="class-chip-label">{cls.replace(/_/g, ' ')}</div>
+                      </div>
                     </div>
-                  </div>
-                ))}
+                  ))}
+                </div>
               </div>
-            </div>
+            )}
 
             {/* Latest tickets */}
             <div className="section">
@@ -151,6 +191,14 @@ export default function App() {
                 <div className="section-title" style={{ margin: 0 }}>Latest tickets</div>
                 <button className="btn btn-ghost btn-sm" onClick={() => setPage('tickets')}>View all →</button>
               </div>
+              {tError   && <ErrorMsg msg={tError} />}
+              {tLoading && <Spinner />}
+              {!tLoading && tickets.length === 0 && (
+                <div className="empty-state">
+                  <div className="empty-state-icon">🎉</div>
+                  <p>No detections yet — start the edge node to see data</p>
+                </div>
+              )}
               <div className="tickets-grid">
                 {tickets.slice(0, 3).map(t => (
                   <TicketCard key={t.id} ticket={t} onClick={setSelectedTicket} />
@@ -169,9 +217,10 @@ export default function App() {
                   <h2>All Tickets</h2>
                   <p>{filtered.length} tickets{filter !== 'all' ? ` · ${filter.replace('_', ' ')}` : ''}</p>
                 </div>
-                <button className="btn btn-primary btn-sm" onClick={() => setShowRaise(true)}>
-                  + Raise
-                </button>
+                <div style={{ display: 'flex', gap: 8 }}>
+                  <button className="btn btn-ghost btn-sm" onClick={() => { refetchTickets(); refetchStats(); }}>↻ Refresh</button>
+                  <button className="btn btn-primary btn-sm" onClick={() => setShowRaise(true)}>+ Raise</button>
+                </div>
               </div>
             </div>
 
@@ -183,16 +232,17 @@ export default function App() {
               ))}
             </div>
 
-            {filtered.length === 0 ? (
+            {tError   && <ErrorMsg msg={tError} />}
+            {tLoading && <Spinner />}
+            {!tLoading && filtered.length === 0 && (
               <div className="empty-state">
                 <div className="empty-state-icon">🎉</div>
-                <p>No {filter} tickets</p>
+                <p>No {filter !== 'all' ? filter.replace('_',' ') : ''} tickets</p>
               </div>
-            ) : (
+            )}
+            {!tLoading && (
               <div className="tickets-grid">
-                {filtered.map(t => (
-                  <TicketCard key={t.id} ticket={t} onClick={setSelectedTicket} />
-                ))}
+                {filtered.map(t => <TicketCard key={t.id} ticket={t} onClick={setSelectedTicket} />)}
               </div>
             )}
           </>
@@ -211,7 +261,7 @@ export default function App() {
       {toast && (
         <div className="toast-container">
           <div className={`toast ${toast.type}`}>
-            <span className="toast-icon">{toast.type === 'success' ? '✓' : 'ℹ'}</span>
+            <span className="toast-icon">{toast.type === 'success' ? '✓' : toast.type === 'error' ? '⚠' : 'ℹ'}</span>
             <div className="toast-title">{toast.msg}</div>
           </div>
         </div>

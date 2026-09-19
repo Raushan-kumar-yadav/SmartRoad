@@ -16,6 +16,7 @@ import { fileURLToPath } from "url";
 
 import detectionsRouter from "./routes/detections";
 import ticketsRouter    from "./routes/tickets";
+import dashboardRouter  from "./routes/dashboard";
 
 const PORT = parseInt(process.env["PORT"] ?? "8000", 10);
 
@@ -40,6 +41,7 @@ app.use("/images", express.static(imgDir));
 // ── Routes ─────────────────────────────────────────────────────
 app.use("/api", detectionsRouter);
 app.use("/api", ticketsRouter);
+app.use("/api", dashboardRouter);
 
 app.get("/", (_req, res) => {
   res.json({
