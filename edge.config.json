@@ -2,9 +2,9 @@
   "cameraSource": "http://192.168.1.x:8080/video",
   "cameraLabel": "IP Webcam (Phone)",
   "modelPath": "e:\\Pothole\\pretrained\\rdd\\best.pt",
-  "confidence": 0.35,
+  "confidence": 0.45,
   "inferEvery": 5,
   "streamPort": 8080,
   "uploadEnabled": true,
-  "updatedAt": "2026-09-19T11:58:37.974Z"
+  "updatedAt": "2026-09-19T12:13:03.124Z"
 }

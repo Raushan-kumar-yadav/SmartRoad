@@ -70,7 +70,6 @@ export default function TicketDetailModal({ ticket, onClose, onClose_ticket }) {
               ['Confidence', `${(ticket.confidence * 100).toFixed(1)}%`],
               ['Ward', ticket.wardName],
               ['Created', timeAgo(ticket.createdAt)],
-              ['GPS', ticket.lat ? `${ticket.lat}, ${ticket.lon}` : 'N/A'],
               ['Assigned To', ticket.assignedTo?.split(' ').slice(-2).join(' ')],
             ].map(([label, val]) => (
               <div key={label} style={{ background: 'var(--bg-card)', borderRadius: 8, padding: '10px 14px', border: '1px solid var(--border)' }}>
@@ -78,6 +77,37 @@ export default function TicketDetailModal({ ticket, onClose, onClose_ticket }) {
                 <div style={{ fontSize: 13, fontWeight: 600 }}>{val}</div>
               </div>
             ))}
+
+            {/* GPS cell — full width with Maps button */}
+            <div style={{ gridColumn: '1 / -1', background: 'var(--bg-card)', borderRadius: 8, padding: '10px 14px', border: '1px solid var(--border)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
+              <div>
+                <div style={{ fontSize: 10, color: 'var(--text-muted)', fontWeight: 600, textTransform: 'uppercase', marginBottom: 4 }}>GPS</div>
+                <div style={{ fontSize: 13, fontWeight: 600, fontFamily: 'monospace' }}>
+                  {ticket.lat ? `${ticket.lat}, ${ticket.lon}` : 'N/A'}
+                </div>
+              </div>
+              {ticket.lat && ticket.lon && (
+                <a
+                  href={`https://www.google.com/maps?q=${ticket.lat},${ticket.lon}&z=18&t=h`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  style={{
+                    display: 'inline-flex', alignItems: 'center', gap: 5,
+                    background: 'rgba(66,133,244,0.12)', border: '1px solid rgba(66,133,244,0.3)',
+                    borderRadius: 7, padding: '6px 12px', fontSize: 11, fontWeight: 600,
+                    color: '#4285f4', textDecoration: 'none', whiteSpace: 'nowrap',
+                    transition: 'all 0.15s', flexShrink: 0,
+                  }}
+                  onMouseEnter={e => e.currentTarget.style.background = 'rgba(66,133,244,0.22)'}
+                  onMouseLeave={e => e.currentTarget.style.background = 'rgba(66,133,244,0.12)'}
+                >
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor">
+                    <path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z"/>
+                  </svg>
+                  View on Google Maps
+                </a>
+              )}
+            </div>
           </div>
 
           {/* Confidence bar */}
