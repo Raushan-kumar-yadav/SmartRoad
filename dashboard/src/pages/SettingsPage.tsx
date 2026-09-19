@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 
 const API = import.meta.env.VITE_API_URL ?? 'http://localhost:8000';
 
@@ -21,6 +21,15 @@ interface TestResult {
   note?: string;
 }
 
+interface EdgeStatus {
+  active:     boolean;
+  fps:        number;
+  lan_ip:     string | null;
+  port:       number | null;
+  gui_url:    string | null;
+  stream_url: string | null;
+}
+
 // Camera presets
 const PRESETS = [
   { label: 'USB Webcam (0)',    source: '0',                              icon: '📷', hint: 'Built-in or first USB camera' },
@@ -38,6 +47,9 @@ export default function SettingsPage() {
   const [testing,  setTesting]  = useState(false);
   const [testResult, setTestResult] = useState<TestResult | null>(null);
   const [saved,    setSaved]    = useState(false);
+  const [edgeStatus, setEdgeStatus] = useState<EdgeStatus | null>(null);
+  const [copied,   setCopied]   = useState(false);
+  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   // Local editable fields
   const [source,    setSource]    = useState('0');
@@ -50,7 +62,25 @@ export default function SettingsPage() {
 
   useEffect(() => {
     void fetchConfig();
+    void fetchEdgeStatus();
+    pollRef.current = setInterval(() => void fetchEdgeStatus(), 3000);
+    return () => { if (pollRef.current) clearInterval(pollRef.current); };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  async function fetchEdgeStatus() {
+    try {
+      const res  = await fetch(`${API}/api/live/status`);
+      const data = await res.json() as EdgeStatus;
+      setEdgeStatus(data);
+    } catch { /* edge offline */ }
+  }
+
+  function copyUrl(url: string) {
+    void navigator.clipboard.writeText(url);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  }
 
   async function fetchConfig() {
     setLoading(true);
@@ -286,6 +316,69 @@ export default function SettingsPage() {
 
           {/* ── Right column — Summary + Save ── */}
           <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+
+            {/* ── Phone URL card (live from edge) ── */}
+            <div style={{
+              background:    edgeStatus?.gui_url ? 'rgba(34,197,94,0.06)' : 'var(--bg-card)',
+              border:        `1px solid ${edgeStatus?.gui_url ? 'rgba(34,197,94,0.25)' : 'var(--border)'}`,
+              borderRadius:  'var(--radius-lg)', padding: 14, transition: 'all 0.3s',
+            }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 10 }}>
+                <span style={{ fontSize: 14 }}>📱</span>
+                <span style={{ fontSize: 12, fontWeight: 600 }}>Open on Phone</span>
+                <span style={{
+                  marginLeft: 'auto', fontSize: 9, fontWeight: 600, padding: '2px 6px',
+                  borderRadius: 999, background: edgeStatus?.gui_url ? 'rgba(34,197,94,0.15)' : 'rgba(63,63,70,0.4)',
+                  color: edgeStatus?.gui_url ? 'var(--green)' : 'var(--text-dim)',
+                  border: `1px solid ${edgeStatus?.gui_url ? 'rgba(34,197,94,0.3)' : 'var(--border)'}`,
+                }}>
+                  {edgeStatus?.gui_url ? '● LIVE' : '○ OFFLINE'}
+                </span>
+              </div>
+
+              {edgeStatus?.gui_url ? (
+                <div>
+                  {/* Clickable URL */}
+                  <a href={edgeStatus.gui_url} target="_blank" rel="noreferrer" style={{
+                    display: 'block', background: 'var(--bg-popover)', border: '1px solid rgba(34,197,94,0.2)',
+                    borderRadius: 'var(--radius-sm)', padding: '9px 12px', fontSize: 12,
+                    fontFamily: 'monospace', color: 'var(--green)', textDecoration: 'none',
+                    wordBreak: 'break-all', marginBottom: 8,
+                  }}>
+                    {edgeStatus.gui_url}
+                  </a>
+                  <div style={{ display: 'flex', gap: 6 }}>
+                    <button
+                      onClick={() => copyUrl(edgeStatus.gui_url!)}
+                      style={{
+                        flex: 1, background: 'transparent', border: '1px solid var(--border)',
+                        borderRadius: 'var(--radius-sm)', padding: '6px 8px', fontSize: 11,
+                        color: copied ? 'var(--green)' : 'var(--text-muted)', cursor: 'pointer',
+                      }}>
+                      {copied ? '✅ Copied!' : '📋 Copy URL'}
+                    </button>
+                    <a href={edgeStatus.gui_url} target="_blank" rel="noreferrer" style={{
+                      flex: 1, background: 'rgba(34,197,94,0.1)', border: '1px solid rgba(34,197,94,0.2)',
+                      borderRadius: 'var(--radius-sm)', padding: '6px 8px', fontSize: 11,
+                      color: 'var(--green)', cursor: 'pointer', textDecoration: 'none',
+                      display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 4,
+                    }}>
+                      🔗 Open
+                    </a>
+                  </div>
+                  <div style={{ fontSize: 10, color: 'var(--text-dim)', marginTop: 8 }}>
+                    Same WiFi required · {edgeStatus.fps} fps · IP: {edgeStatus.lan_ip}
+                  </div>
+                </div>
+              ) : (
+                <div style={{ fontSize: 11, color: 'var(--text-dim)', lineHeight: 1.6 }}>
+                  Edge not running. Start with:<br/>
+                  <code style={{ display: 'block', marginTop: 6, background: 'var(--bg-popover)', border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', padding: '6px 8px', fontSize: 10, color: 'var(--text-muted)' }}>
+                    npm run dev:full
+                  </code>
+                </div>
+              )}
+            </div>
 
             {/* Current config summary */}
             <div style={{ background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 'var(--radius-lg)', padding: 14 }}>

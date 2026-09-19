@@ -98,6 +98,7 @@ _stream_meta     = {
     "active": False, "fps": 0.0, "lat": None, "lon": None,
     "reports_sent": 0, "detections": [],
     "frame_count": 0, "start_time": time.time(),
+    "lan_ip": None, "port": None, "gui_url": None, "stream_url": None,
 }
 _upload_queue    = queue.Queue(maxsize=20)   # (payload_dict) — async uploads
 
@@ -427,6 +428,12 @@ def _start_stream_server(port: int):
                          name="mjpeg-server")
     t.start()
     lan_ip = _get_local_ip()
+    # Store in shared meta so /info returns it (Settings page reads this)
+    with _frame_lock:
+        _stream_meta["lan_ip"]     = lan_ip
+        _stream_meta["port"]       = port
+        _stream_meta["gui_url"]    = f"http://{lan_ip}:{port}/"
+        _stream_meta["stream_url"] = f"http://{lan_ip}:{port}/stream"
     print(f"[Stream] ─────────────────────────────────────")
     print(f"[Stream] 📱 Open on phone  → http://{lan_ip}:{port}/")
     print(f"[Stream] 💻 Local browser  → http://localhost:{port}/")
