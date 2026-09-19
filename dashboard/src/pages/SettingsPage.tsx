@@ -222,6 +222,16 @@ export default function SettingsPage() {
 
   const isHttpSource = source.startsWith('http://') || source.startsWith('https://');
 
+  // Computed: merged camera list (phone when active + USB cams from scan)
+  const allCams: Array<{ source: string; label: string; icon: string; hint: string; live?: boolean }> = [];
+  if (edgeStatus?.phone_active && edgeStatus.phone_source) {
+    allCams.push({ source: edgeStatus.phone_source, label: 'Phone Camera', icon: '📱', hint: '● Connected now', live: true });
+  }
+  cameras.forEach(cam => {
+    allCams.push({ source: cam.source, label: `Camera ${cam.index}`, icon: '📷', hint: `${cam.width}×${cam.height} @ ${cam.fps}fps` });
+  });
+  const activeSrc = edgeStatus?.current_source ?? source;
+
   return (
     <div>
       <div className="page-header">
@@ -276,42 +286,13 @@ export default function SettingsPage() {
                   </div>
                 )}
 
-                {/* Build merged camera list: phone first (when connected) + USB cams */}
-                {edgeStatus?.gui_url && (() => {
-                  const allCams: Array<{ source: string; label: string; icon: string; hint: string; live?: boolean }> = [];
-
-                  // Phone cam — always shown when connected
-                  if (edgeStatus.phone_active && edgeStatus.phone_source) {
-                    allCams.push({
-                      source: edgeStatus.phone_source,
-                      label:  'Phone Camera',
-                      icon:   '📱',
-                      hint:   '● Connected now',
-                      live:   true,
-                    });
-                  }
-
-                  // USB cams from scan
-                  cameras.forEach(cam => {
-                    allCams.push({
-                      source: cam.source,
-                      label:  `Camera ${cam.index}`,
-                      icon:   '📷',
-                      hint:   `${cam.width}×${cam.height} @ ${cam.fps}fps`,
-                    });
-                  });
-
-                  if (allCams.length === 0) {
-                    return (
-                      <div style={{ fontSize: 11, color: 'var(--text-dim)', textAlign: 'center', padding: '8px 0' }}>
-                        {scanning ? 'Scanning…' : 'No cameras detected — tap Scan USB or connect phone'}
-                      </div>
-                    );
-                  }
-
-                  const activeSrc = edgeStatus.current_source ?? source;
-
-                  return (
+                {/* Merged camera list: phone + USB */}
+                {edgeStatus?.gui_url && (
+                  allCams.length === 0 ? (
+                    <div style={{ fontSize: 11, color: 'var(--text-dim)', textAlign: 'center', padding: '8px 0' }}>
+                      {scanning ? 'Scanning…' : 'No cameras detected — tap Scan USB or connect phone'}
+                    </div>
+                  ) : (
                     <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
                       {allCams.map(cam => {
                         const isActive = activeSrc === cam.source || source === cam.source;
@@ -351,8 +332,8 @@ export default function SettingsPage() {
                         );
                       })}
                     </div>
-                  );
-                })()}
+                  )
+                )}
               </div>
 
               {/* Presets */}
