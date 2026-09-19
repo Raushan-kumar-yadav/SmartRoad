@@ -76,16 +76,23 @@ router.get("/live/info", async (_req: Request, res: Response) => {
 // GET /api/live/stream   
 router.get("/live/stream", (req: Request, res: Response) => {
   const piReq = http.get(
-    { hostname: PI_HOST, port: PI_PORT, path: "/stream", timeout: 5000 },
+    { hostname: PI_HOST, port: PI_PORT, path: "/stream" },   // NO timeout — stream is infinite
     (piRes) => {
+      // Keep TCP connection alive
+      piRes.socket?.setKeepAlive(true);
       res.setHeader("Content-Type",  piRes.headers["content-type"] ?? "multipart/x-mixed-replace; boundary=frame");
-      res.setHeader("Cache-Control", "no-cache");
+      res.setHeader("Cache-Control", "no-cache, no-store");
+      res.setHeader("Connection",    "keep-alive");
       res.setHeader("Access-Control-Allow-Origin", "*");
       piRes.pipe(res);
+      piRes.on("error", () => res.destroy());
     }
   );
-  piReq.on("error", () => res.status(503).json({ error: "Edge device not reachable" }));
-  req.on("close", () => piReq.destroy());   
+  piReq.on("error", () => {
+    if (!res.headersSent) res.status(503).json({ error: "Edge device not reachable" });
+  });
+  // Client tab closed → tear down the Pi connection immediately
+  req.on("close", () => { piReq.destroy(); });
 });
 
 export default router;

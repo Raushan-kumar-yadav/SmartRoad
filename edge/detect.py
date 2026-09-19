@@ -39,8 +39,13 @@ import os
 import threading
 import time
 from http.server import BaseHTTPRequestHandler, HTTPServer
+from socketserver import ThreadingMixIn
 import json
 import urllib.request
+
+class ThreadingHTTPServer(ThreadingMixIn, HTTPServer):
+    """HTTPServer that handles each request in its own thread."""
+    daemon_threads = True
 
 import cv2
 
@@ -147,32 +152,41 @@ class MJPEGHandler(BaseHTTPRequestHandler):
         self.send_header("Access-Control-Allow-Methods", "GET, OPTIONS")
 
     def do_OPTIONS(self):
-        self.send_response(200)
-        self._cors()
-        self.end_headers()
+        try:
+            self.send_response(200)
+            self._cors()
+            self.end_headers()
+        except (BrokenPipeError, ConnectionAbortedError, ConnectionResetError):
+            pass
 
     def do_GET(self):
-        if self.path == "/stream":
-            self._serve_stream()
-        elif self.path == "/info":
-            self._serve_info()
-        elif self.path == "/health":
-            self.send_response(200); self._cors(); self.end_headers()
-            self.wfile.write(b"ok")
-        elif self.path == "/snapshot":
-            self._serve_snapshot()
-        else:
-            self.send_response(404); self.end_headers()
+        try:
+            if self.path == "/stream":
+                self._serve_stream()
+            elif self.path == "/info":
+                self._serve_info()
+            elif self.path == "/health":
+                self.send_response(200); self._cors(); self.end_headers()
+                self.wfile.write(b"ok")
+            elif self.path == "/snapshot":
+                self._serve_snapshot()
+            else:
+                self.send_response(404); self.end_headers()
+        except (BrokenPipeError, ConnectionAbortedError, ConnectionResetError):
+            pass
 
     def _serve_stream(self):
-        self.send_response(200)
-        self.send_header("Content-Type",
-                         "multipart/x-mixed-replace; boundary=frame")
-        self._cors()
-        self.end_headers()
-        interval = 1.0 / STREAM_FPS
         try:
-            while True:
+            self.send_response(200)
+            self.send_header("Content-Type",
+                             "multipart/x-mixed-replace; boundary=frame")
+            self._cors()
+            self.end_headers()
+        except (BrokenPipeError, ConnectionAbortedError, ConnectionResetError):
+            return
+        interval = 1.0 / STREAM_FPS
+        while True:
+            try:
                 with _frame_lock:
                     frame = _latest_jpeg
                 if frame:
@@ -180,35 +194,42 @@ class MJPEGHandler(BaseHTTPRequestHandler):
                         b"--frame\r\nContent-Type: image/jpeg\r\n\r\n"
                         + frame + b"\r\n"
                     )
+                    self.wfile.flush()
                 time.sleep(interval)
-        except (BrokenPipeError, ConnectionResetError):
-            pass
+            except (BrokenPipeError, ConnectionAbortedError, ConnectionResetError, OSError):
+                break  # client disconnected — exit cleanly
 
     def _serve_info(self):
-        self.send_response(200)
-        self.send_header("Content-Type", "application/json")
-        self._cors()
-        self.end_headers()
-        with _frame_lock:
-            data = dict(_stream_meta)
-        self.wfile.write(json.dumps(data).encode())
+        try:
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self._cors()
+            self.end_headers()
+            with _frame_lock:
+                data = dict(_stream_meta)
+            self.wfile.write(json.dumps(data).encode())
+        except (BrokenPipeError, ConnectionAbortedError, ConnectionResetError):
+            pass
 
     def _serve_snapshot(self):
         """Return a single JPEG snapshot."""
-        with _frame_lock:
-            frame = _latest_jpeg
-        if not frame:
-            self.send_response(503); self.end_headers(); return
-        self.send_response(200)
-        self.send_header("Content-Type", "image/jpeg")
-        self._cors()
-        self.end_headers()
-        self.wfile.write(frame)
+        try:
+            with _frame_lock:
+                frame = _latest_jpeg
+            if not frame:
+                self.send_response(503); self.end_headers(); return
+            self.send_response(200)
+            self.send_header("Content-Type", "image/jpeg")
+            self._cors()
+            self.end_headers()
+            self.wfile.write(frame)
+        except (BrokenPipeError, ConnectionAbortedError, ConnectionResetError):
+            pass
 
 
 def _start_stream_server(port: int):
-    """Start MJPEG HTTP server in a daemon thread."""
-    srv = HTTPServer(("0.0.0.0", port), MJPEGHandler)
+    """Start threaded MJPEG HTTP server — each client gets its own thread."""
+    srv = ThreadingHTTPServer(("0.0.0.0", port), MJPEGHandler)
     t = threading.Thread(target=srv.serve_forever, daemon=True,
                          name="mjpeg-server")
     t.start()
