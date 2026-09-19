@@ -1,0 +1,18 @@
+{
+  "name": "smartroad",
+  "version": "1.0.0",
+  "private": true,
+  "description": "SmartRoad — Road Defect Detection System",
+  "scripts": {
+    "dev": "concurrently --names \"SERVER,UI\" --prefix-colors \"cyan,magenta\" \"npm run dev:server\" \"npm run dev:ui\"",
+    "dev:full": "concurrently --names \"SERVER,UI,EDGE\" --prefix-colors \"cyan,magenta,yellow\" \"npm run dev:server\" \"npm run dev:ui\" \"npm run dev:edge\"",
+    "dev:server": "cd server && npx tsx src/index.ts",
+    "dev:ui": "cd dashboard && npm run dev -- --port 5173",
+    "dev:edge": "python -m edge.detect --no-upload",
+    "install:all": "cd server && npm install && cd ../dashboard && npm install",
+    "build": "cd dashboard && npm run build"
+  },
+  "devDependencies": {
+    "concurrently": "^9.0.1"
+  }
+}
