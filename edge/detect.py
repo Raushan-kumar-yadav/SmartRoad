@@ -572,7 +572,7 @@ def run(args):
                     conf    = float(box.conf[0])
                     x1, y1, x2, y2 = map(int, box.xyxy[0])
 
-                    raw_name = model.names[cls_id]
+                    raw_name = _model.names[cls_id]
                     name     = MODEL_CLASS_REMAP.get(
                                    raw_name,
                                    MODEL_CLASS_REMAP.get(str(cls_id), raw_name)
