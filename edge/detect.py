@@ -509,8 +509,24 @@ def run(args):
     gps = GPS(mock_coords=(28.6139, 77.2090))
     gps.start()
 
-    #  Open camera
-    cap = _open_camera(args.source)
+    #  Open camera (or enter mobile-only mode if source is a placeholder)
+    PLACEHOLDER_PATTERNS = (".x:", "<ip>", "<host>", "x.x.x", "0.0.0.0",
+                            "example", "your_ip", "YOUR_IP")
+    source_str = str(args.source)
+    is_placeholder = any(p in source_str for p in PLACEHOLDER_PATTERNS)
+
+    cap = None
+    if is_placeholder:
+        print(f"[Detect] ⚠ Camera source looks like a placeholder: {source_str!r}")
+        print( "[Detect]   → Skipping local camera. Mobile /analyze endpoint is active.")
+        print( "[Detect]   → Fix source in Settings → Save Config → restart.")
+    else:
+        try:
+            cap = _open_camera(args.source)
+        except RuntimeError as e:
+            print(f"[Detect] ⚠ Cannot open camera: {e}")
+            print( "[Detect]   → Entering mobile-only mode (/analyze endpoint active).")
+            cap = None
 
     # State
     frame_count = 0
@@ -521,10 +537,22 @@ def run(args):
     fps_t0 = time.time()
 
     print(f"\n[Detect] Pipeline running")
-    print(f"[Detect] Inference every {INFER_EVERY_N} frames | conf >= {args.conf}")
     print(f"[Detect] Upload: {'YES' if args.upload else 'NO'}")
     print(f"[Detect] Preview: {'YES' if args.preview else 'NO (headless)'}")
-    print("[Detect] Press Ctrl+C or Q to stop\n")
+    print("[Detect] Press Ctrl+C to stop\n")
+
+    # ── Mobile-only mode: no local camera, just serve /analyze ────────────────
+    if cap is None:
+        print("[Detect] 📱 Mobile-only mode — YOLO available via POST https://...8080/analyze")
+        print("[Detect]    Open your phone browser → accept cert → press Start")
+        try:
+            while True:
+                time.sleep(1)
+        except KeyboardInterrupt:
+            print("\n[Detect] Stopped")
+        finally:
+            _upload_queue.put(None)
+        return
 
     FAIL_LIMIT    = 30    # give up after N consecutive read failures
     fail_streak   = 0
@@ -635,12 +663,11 @@ def run(args):
     except KeyboardInterrupt:
         print("\n[Detect] Interrupted by user")
     finally:
-        # Stop stream
         with _frame_lock:
             _stream_meta["active"] = False
-        # Drain upload queue
         _upload_queue.put(None)  # poison pill
-        cap.release()
+        if cap is not None:
+            cap.release()
         gps.stop()
         cv2.destroyAllWindows()
         print(f"\n[Detect] Done — {frame_count} frames processed, "
