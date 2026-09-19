@@ -22,26 +22,26 @@ interface TestResult {
 }
 
 interface EdgeStatus {
-  active:         boolean;
-  fps:            number;
+  active: boolean;
+  fps: number;
   lan_ip:         string | null;
-  port:           number | null;
-  gui_url:        string | null;
-  stream_url:     string | null;
-  phone_active:   boolean;
+  port: number | null;
+  gui_url: string | null;
+  stream_url: string | null;
+  phone_active: boolean;
   phone_source:   string | null;
   current_source: string | null;
-  model_ready:    boolean;
+  model_ready: boolean;
 }
 
 // Camera presets
 const PRESETS = [
-  { label: 'USB Webcam (0)',    source: '0',                              icon: '📷', hint: 'Built-in or first USB camera' },
-  { label: 'USB Webcam (1)',    source: '1',                              icon: '📷', hint: 'Second USB camera' },
+  { label: 'USB Webcam (0)', source: '0', icon: '📷', hint: 'Built-in or first USB camera' },
+  { label: 'USB Webcam (1)',    source: '1', icon: '📷', hint: 'Second USB camera' },
   { label: 'IP Webcam (Phone)', source: 'http://192.168.1.x:8080/video', icon: '📱', hint: 'Android: install IP Webcam app' },
-  { label: 'DroidCam',          source: 'http://192.168.1.x:4747/video', icon: '📱', hint: 'Android: install DroidCam app' },
-  { label: 'RTSP Camera',       source: 'rtsp://user:pass@192.168.1.x/stream', icon: '🎥', hint: 'IP camera / NVR RTSP stream' },
-  { label: 'Video File',        source: 'road_clip.mp4',                 icon: '📂', hint: 'For testing — loops the file' },
+  { label: 'DroidCam', source: 'http://192.168.1.x:4747/video', icon: '📱', hint: 'Android: install DroidCam app' },
+  { label: 'RTSP Camera', source: 'rtsp://user:pass@192.168.1.x/stream', icon: '🎥', hint: 'IP camera / NVR RTSP stream' },
+  { label: 'Video File', source: 'road_clip.mp4', icon: '📂', hint: 'For testing — loops the file' },
 ];
 
 interface DetectedCamera {
@@ -54,15 +54,15 @@ interface DetectedCamera {
 }
 
 export default function SettingsPage() {
-  const [config,   setConfig]   = useState<EdgeConfig | null>(null);
+  const [config, setConfig]   = useState<EdgeConfig | null>(null);
   const [loading,  setLoading]  = useState(true);
-  const [saving,   setSaving]   = useState(false);
+  const [saving, setSaving]   = useState(false);
   const [testing,  setTesting]  = useState(false);
   const [testResult, setTestResult] = useState<TestResult | null>(null);
   const [saved,    setSaved]    = useState(false);
   const [edgeStatus, setEdgeStatus] = useState<EdgeStatus | null>(null);
-  const [copied,   setCopied]   = useState(false);
-  const [cameras,  setCameras]  = useState<DetectedCamera[]>([]);
+  const [copied, setCopied]   = useState(false);
+  const [cameras, setCameras]  = useState<DetectedCamera[]>([]);
   const [scanning, setScanning] = useState(false);
   const [browseOpen, setBrowseOpen] = useState(false);
   const [videoFiles, setVideoFiles] = useState<Array<{path:string;name:string;sizeKb:number;dir:string}>>([]);
@@ -70,20 +70,20 @@ export default function SettingsPage() {
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   // Local editable fields
-  const [source,    setSource]    = useState('0');
-  const [label,     setLabel]     = useState('USB Webcam (index 0)');
+  const [source, setSource] = useState('0');
+  const [label, setLabel]     = useState('USB Webcam (index 0)');
   const [modelPath, setModelPath] = useState('');
-  const [conf,      setConf]      = useState(0.35);
-  const [every,     setEvery]     = useState(5);
+  const [conf, setConf] = useState(0.35);
+  const [every, setEvery] = useState(5);
   const [port,      setPort]      = useState(8080);
-  const [upload,    setUpload]    = useState(true);
+  const [upload, setUpload]    = useState(true);
 
   useEffect(() => {
     void fetchConfig();
     void fetchEdgeStatus();
     pollRef.current = setInterval(() => void fetchEdgeStatus(), 3000);
     return () => { if (pollRef.current) clearInterval(pollRef.current); };
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+  
   }, []);
 
   async function fetchEdgeStatus() {
@@ -135,19 +135,19 @@ export default function SettingsPage() {
   }
 
   async function switchCamera(newSource: string, newLabel: string) {
-    // 1. Send hot-swap request to edge (no restart needed)
+    
     try {
       await fetch(`${API}/api/live/switch-camera`, {
         method:  'POST',
         headers: { 'Content-Type': 'application/json' },
         body:    JSON.stringify({ source: newSource }),
       });
-    } catch { /* edge may be offline, still update config */ }
-    // 2. Persist to config
+    } catch {   }
+ 
     setSource(newSource);
     setLabel(newLabel);
     setTestResult(null);
-    // Also auto-save
+ 
     try {
       await fetch(`${API}/api/config`, {
         method:  'POST',
@@ -200,17 +200,17 @@ export default function SettingsPage() {
     try {
       const payload: Partial<EdgeConfig> = {
         cameraSource: source,
-        cameraLabel:  label,
+        cameraLabel: label,
         modelPath,
-        confidence:   conf,
-        inferEvery:   every,
-        streamPort:   port,
+        confidence: conf,
+        inferEvery: every,
+        streamPort: port,
         uploadEnabled: upload,
       };
       const res = await fetch(`${API}/api/config`, {
-        method:  'POST',
+        method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body:    JSON.stringify(payload),
+        body: JSON.stringify(payload),
       });
       const data = await res.json() as { config: EdgeConfig };
       setConfig(data.config);
@@ -222,7 +222,7 @@ export default function SettingsPage() {
 
   const isHttpSource = source.startsWith('http://') || source.startsWith('https://');
 
-  // Computed: merged camera list (phone when active + USB cams from scan)
+  // Computed: merged camera list  
   const allCams: Array<{ source: string; label: string; icon: string; hint: string; live?: boolean }> = [];
   if (edgeStatus?.phone_active && edgeStatus.phone_source) {
     allCams.push({ source: edgeStatus.phone_source, label: 'Phone Camera', icon: '📱', hint: '● Connected now', live: true });
@@ -233,6 +233,7 @@ export default function SettingsPage() {
   const activeSrc = edgeStatus?.current_source ?? source;
 
   return (
+    <>
     <div>
       <div className="page-header">
         <div>
@@ -739,5 +740,6 @@ export default function SettingsPage() {
         </div>
       </div>
     )}
+    </>
   );
 }
