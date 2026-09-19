@@ -161,7 +161,9 @@ class MJPEGHandler(BaseHTTPRequestHandler):
 
     def do_GET(self):
         try:
-            if self.path == "/stream":
+            if self.path in ("/", "/index.html"):
+                self._serve_index()
+            elif self.path == "/stream":
                 self._serve_stream()
             elif self.path == "/info":
                 self._serve_info()
@@ -172,6 +174,183 @@ class MJPEGHandler(BaseHTTPRequestHandler):
                 self._serve_snapshot()
             else:
                 self.send_response(404); self.end_headers()
+        except (BrokenPipeError, ConnectionAbortedError, ConnectionResetError):
+            pass
+
+    def _serve_index(self):
+        """Serve the mobile camera control UI."""
+        html = b'''<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+<title>SmartRoad Edge</title>
+<style>
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{background:#09090b;color:#fafafa;font-family:-apple-system,BlinkMacSystemFont,\'Segoe UI\',sans-serif;min-height:100dvh;display:flex;flex-direction:column}
+  header{display:flex;align-items:center;justify-content:space-between;padding:14px 16px;border-bottom:1px solid #27272a;background:#09090b;position:sticky;top:0;z-index:10}
+  .logo{font-size:15px;font-weight:700;letter-spacing:-.3px}  
+  .dot{width:8px;height:8px;border-radius:50%;background:#3f3f46;display:inline-block;margin-right:6px;transition:background .3s}
+  .dot.live{background:#22c55e;box-shadow:0 0 0 3px rgba(34,197,94,.2);animation:pulse 2s infinite}
+  @keyframes pulse{0%,100%{box-shadow:0 0 0 3px rgba(34,197,94,.2)}50%{box-shadow:0 0 0 6px rgba(34,197,94,.05)}}
+  .badge{font-size:10px;font-weight:600;padding:3px 8px;border-radius:999px;border:1px solid #27272a;color:#a1a1aa}
+  .badge.live{border-color:rgba(34,197,94,.3);color:#22c55e;background:rgba(34,197,94,.08)}
+  
+  #preview-wrap{position:relative;width:100%;background:#000;aspect-ratio:16/9;overflow:hidden}
+  #preview-wrap img{width:100%;height:100%;object-fit:cover;display:block}
+  #no-cam{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;color:#52525b;font-size:13px}
+  #no-cam svg{width:48px;height:48px;stroke:#3f3f46}
+  #fps-badge{position:absolute;bottom:10px;right:10px;background:rgba(0,0,0,.7);color:#a1a1aa;font-size:10px;padding:3px 8px;border-radius:6px;font-family:monospace}
+  #gps-badge{position:absolute;bottom:10px;left:10px;background:rgba(0,0,0,.7);color:#a1a1aa;font-size:10px;padding:3px 8px;border-radius:6px;font-family:monospace}
+
+  .controls{display:flex;gap:10px;padding:14px 16px}
+  .btn{flex:1;padding:13px;border-radius:10px;border:none;font-size:14px;font-weight:600;cursor:pointer;transition:all .15s;display:flex;align-items:center;justify-content:center;gap:7px}
+  .btn-start{background:#22c55e;color:#000}
+  .btn-start:active{background:#16a34a;transform:scale(.97)}
+  .btn-stop{background:#27272a;color:#fafafa;border:1px solid #3f3f46}
+  .btn-stop:active{background:#18181b;transform:scale(.97)}
+  .btn:disabled{opacity:.4;cursor:not-allowed}
+
+  .stats{display:grid;grid-template-columns:1fr 1fr;gap:1px;background:#27272a;border-top:1px solid #27272a;border-bottom:1px solid #27272a}
+  .stat{background:#09090b;padding:12px 16px}
+  .stat-label{font-size:10px;color:#52525b;font-weight:500;text-transform:uppercase;letter-spacing:.5px}
+  .stat-value{font-size:18px;font-weight:700;margin-top:2px;font-family:monospace}
+  .stat-value.green{color:#22c55e}
+  
+  .detections{flex:1;overflow-y:auto;padding:12px 16px;display:flex;flex-direction:column;gap:8px}
+  .det-header{font-size:11px;color:#52525b;font-weight:600;text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px}
+  .det-item{display:flex;align-items:center;justify-content:space-between;background:#18181b;border:1px solid #27272a;border-radius:8px;padding:10px 12px}
+  .det-name{font-size:13px;font-weight:600}
+  .det-conf{font-size:12px;color:#22c55e;font-family:monospace;font-weight:600}
+  .det-conf.med{color:#f59e0b}
+  .det-conf.low{color:#ef4444}
+  .empty{color:#3f3f46;font-size:13px;text-align:center;padding:20px}
+
+  .server-info{padding:12px 16px;font-size:11px;color:#3f3f46;text-align:center;border-top:1px solid #18181b}
+</style>
+</head>
+<body>
+
+<header>
+  <div class="logo">&#x1F6E3; SmartRoad Edge</div>
+  <div>
+    <span class="dot" id="dot"></span>
+    <span class="badge" id="status-badge">Offline</span>
+  </div>
+</header>
+
+<div id="preview-wrap">
+  <img id="stream-img" src="" alt="" style="display:none" crossorigin>
+  <div id="no-cam">
+    <svg viewBox="0 0 24 24" fill="none" stroke-width="1.5"><path d="M15 10l4.553-2.276A1 1 0 0121 8.723v6.554a1 1 0 01-1.447.894L15 14M3 8a2 2 0 012-2h10a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2V8z"/></svg>
+    <span id="no-cam-text">Press Start to begin</span>
+  </div>
+  <span id="fps-badge" style="display:none">0 fps</span>
+  <span id="gps-badge" style="display:none">No GPS</span>
+</div>
+
+<div class="controls">
+  <button class="btn btn-start" id="btn-start" onclick="startCam()">&#x25B6; Start Camera</button>
+  <button class="btn btn-stop" id="btn-stop" onclick="stopCam()" disabled>&#x25A0; Stop</button>
+</div>
+
+<div class="stats">
+  <div class="stat"><div class="stat-label">FPS</div><div class="stat-value" id="sv-fps">0</div></div>
+  <div class="stat"><div class="stat-label">Reports sent</div><div class="stat-value green" id="sv-reports">0</div></div>
+  <div class="stat"><div class="stat-label">Detections</div><div class="stat-value" id="sv-dets">0</div></div>
+  <div class="stat"><div class="stat-label">GPS</div><div class="stat-value" id="sv-gps" style="font-size:12px;margin-top:6px">-</div></div>
+</div>
+
+<div class="detections">
+  <div class="det-header">Live Detections</div>
+  <div id="det-list"><div class="empty">No detections yet</div></div>
+</div>
+
+<div class="server-info" id="server-info">SmartRoad Edge Device &#x2022; <span id="host-info"></span></div>
+
+<script>
+  let running = false;
+  let pollTimer = null;
+  const img = document.getElementById(\'stream-img\');
+  const noCam = document.getElementById(\'no-cam\');
+  const dot = document.getElementById(\'dot\');
+  const badge = document.getElementById(\'status-badge\');
+
+  document.getElementById(\'host-info\').textContent = location.host;
+
+  function startCam() {
+    running = true;
+    document.getElementById(\'btn-start\').disabled = true;
+    document.getElementById(\'btn-stop\').disabled = false;
+    img.src = \'/stream?t=\' + Date.now();
+    img.style.display = \'block\';
+    noCam.style.display = \'none\';
+    dot.classList.add(\'live\');
+    badge.textContent = \'Live\';
+    badge.classList.add(\'live\');
+    document.getElementById(\'fps-badge\').style.display = \'block\';
+    document.getElementById(\'gps-badge\').style.display = \'block\';
+    startPolling();
+  }
+
+  function stopCam() {
+    running = false;
+    img.src = \'\'; img.style.display = \'none\';
+    noCam.style.display = \'flex\';
+    document.getElementById(\'no-cam-text\').textContent = \'Stopped\';
+    document.getElementById(\'btn-start\').disabled = false;
+    document.getElementById(\'btn-stop\').disabled = true;
+    dot.classList.remove(\'live\');
+    badge.textContent = \'Offline\'; badge.classList.remove(\'live\');
+    document.getElementById(\'fps-badge\').style.display = \'none\';
+    document.getElementById(\'gps-badge\').style.display = \'none\';
+    if (pollTimer) clearInterval(pollTimer);
+  }
+
+  img.onerror = function() {
+    if (running) {
+      document.getElementById(\'no-cam-text\').textContent = \'No camera signal\';
+      noCam.style.display = \'flex\'; img.style.display = \'none\';
+    }
+  };
+
+  function startPolling() {
+    fetchInfo();
+    pollTimer = setInterval(fetchInfo, 1500);
+  }
+
+  function fetchInfo() {
+    fetch(\'/info\').then(r => r.json()).then(d => {
+      document.getElementById(\'sv-fps\').textContent = d.fps ?? 0;
+      document.getElementById(\'sv-reports\').textContent = d.reports_sent ?? 0;
+      const dets = d.detections || [];
+      document.getElementById(\'sv-dets\').textContent = dets.length;
+      // GPS
+      if (d.lat && d.lon) {
+        const g = d.lat.toFixed(4) + \', \' + d.lon.toFixed(4);
+        document.getElementById(\'sv-gps\').textContent = g;
+        document.getElementById(\'gps-badge\').textContent = \' GPS \' + g;
+      }
+      document.getElementById(\'fps-badge\').textContent = (d.fps ?? 0) + \' fps\';
+      // Detections list
+      const list = document.getElementById(\'det-list\');
+      if (!dets.length) { list.innerHTML = \'<div class="empty">No active detections</div>\'; return; }
+      list.innerHTML = dets.map(det => {
+        const c = det.confidence;
+        const cls = c >= 0.7 ? \'\' : c >= 0.5 ? \'med\' : \'low\';
+        return `<div class="det-item"><span class="det-name">${det.class}</span><span class="det-conf ${cls}">${(c*100).toFixed(0)}%</span></div>`;
+      }).join(\'\');
+    }).catch(() => {});
+  }
+</script>
+</body></html>'''
+        try:
+            self.send_response(200)
+            self.send_header("Content-Type", "text/html; charset=utf-8")
+            self.send_header("Content-Length", str(len(html)))
+            self._cors()
+            self.end_headers()
+            self.wfile.write(html)
         except (BrokenPipeError, ConnectionAbortedError, ConnectionResetError):
             pass
 
@@ -233,10 +412,10 @@ def _start_stream_server(port: int):
     t = threading.Thread(target=srv.serve_forever, daemon=True,
                          name="mjpeg-server")
     t.start()
-    print(f"[Stream] MJPEG  → http://0.0.0.0:{port}/stream")
-    print(f"[Stream] Snap   → http://0.0.0.0:{port}/snapshot")
-    print(f"[Stream] Info   → http://0.0.0.0:{port}/info")
-    print(f"[Stream] Health → http://0.0.0.0:{port}/health")
+    print(f"[Stream] 📱 Mobile GUI  → http://localhost:{port}/")
+    print(f"[Stream] 🎥 MJPEG feed  → http://localhost:{port}/stream")
+    print(f"[Stream] ℹ️  Info API    → http://localhost:{port}/info")
+
 
 
 # ── Async upload worker ───────────────────────────────────────────────────────
