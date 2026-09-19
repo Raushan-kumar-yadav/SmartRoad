@@ -28,11 +28,11 @@ function ErrorMsg({ msg }: { msg: string }) {
 }
 
 export default function App() {
-  const [page,           setPage]           = useState<Page>('dashboard');
-  const [filter,         setFilter]         = useState<Filter>('all');
+  const [page, setPage] = useState<Page>('dashboard');
+  const [filter, setFilter] = useState<Filter>('all');
   const [selectedTicket, setSelectedTicket] = useState<Ticket | null>(null);
-  const [showRaise,      setShowRaise]      = useState(false);
-  const [toast,          setToast]          = useState<{ msg: string; type: string } | null>(null);
+  const [showRaise, setShowRaise] = useState(false);
+  const [toast, setToast] = useState<{ msg: string; type: string } | null>(null);
 
   // ── Live data ──
   const { data: allTickets,  loading: tLoading, error: tError, refetch: refetchTickets } = useTickets();
@@ -58,10 +58,10 @@ export default function App() {
     try {
       await api.submitReport({
         class_name:  data.category,
-        confidence:  0.0,   // manual — no AI score
-        lat:         data.gps ? parseFloat(data.gps.lat) : undefined,
-        lon:         data.gps ? parseFloat(data.gps.lon) : undefined,
-        notes:       data.description || 'Manually raised',
+        confidence:  0.0,   // manual  
+        lat: data.gps ? parseFloat(data.gps.lat) : undefined,
+        lon: data.gps ? parseFloat(data.gps.lon) : undefined,
+        notes: data.description || 'Manually raised',
       });
       refetchTickets();
       refetchStats();
@@ -73,9 +73,9 @@ export default function App() {
     }
   }
 
-  const tickets     = allTickets ?? [];
-  const filtered    = filter === 'all' ? tickets : tickets.filter(t => t.status === filter);
-  const openCount     = tickets.filter(t => t.status === 'open').length;
+  const tickets = allTickets ?? [];
+  const filtered = filter === 'all' ? tickets : tickets.filter(t => t.status === filter);
+  const openCount = tickets.filter(t => t.status === 'open').length;
   const criticalCount = tickets.filter(t => t.priority === 'critical').length;
   const resolvedCount = tickets.filter(t => t.status === 'resolved').length;
 
@@ -130,10 +130,10 @@ export default function App() {
 
         <div className="sidebar-stats">
           {([
-            ['Open',     openCount,             'var(--orange)'],
-            ['Critical', criticalCount,         'var(--red)'],
-            ['Resolved', resolvedCount,         'var(--green)'],
-            ['Total',    tickets.length,        'var(--text-muted)'],
+            ['Open', openCount, 'var(--orange)'],
+            ['Critical', criticalCount, 'var(--red)'],
+            ['Resolved', resolvedCount, 'var(--green)'],
+            ['Total', tickets.length, 'var(--text-muted)'],
           ] as [string, number, string][]).map(([l, v, c]) => (
             <div key={l} className="sidebar-stat">
               <div className="sidebar-stat-label">{l}</div>
@@ -158,11 +158,11 @@ export default function App() {
 
             <div className="stats-grid">
               {[
-                { label: 'Total Reports', value: stats?.total          ?? '—', icon: '📋', color: 'var(--text)' },
-                { label: 'Open',          value: stats?.openTickets    ?? '—', icon: '🔓', color: 'var(--orange)' },
-                { label: 'Resolved',      value: stats?.resolvedTickets ?? '—', icon: '✓',  color: 'var(--green)' },
-                { label: 'Last 24h',      value: stats?.last24h        ?? '—', icon: '⏱',  color: 'var(--accent-blue)' },
-                { label: 'Critical',      value: stats?.byPriority?.critical ?? '—', icon: '!', color: 'var(--red)' },
+                { label: 'Total Reports', value: stats?.total ?? '—', icon: '📋', color: 'var(--text)' },
+                { label: 'Open', value: stats?.openTickets ?? '—', icon: '🔓', color: 'var(--orange)' },
+                { label: 'Resolved', value: stats?.resolvedTickets ?? '—', icon: '✓',  color: 'var(--green)' },
+                { label: 'Last 24h', value: stats?.last24h ?? '—', icon: '⏱',  color: 'var(--accent-blue)' },
+                { label: 'Critical', value: stats?.byPriority?.critical ?? '—', icon: '!', color: 'var(--red)' },
               ].map(s => (
                 <div className="stat-card" key={s.label}>
                   <div className="stat-card-label">{s.icon} {s.label}</div>

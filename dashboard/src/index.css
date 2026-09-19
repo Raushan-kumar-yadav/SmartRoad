@@ -290,7 +290,7 @@ body {
 .upload-zone-icon  { font-size: 24px; margin-bottom: 6px; }
 .upload-zone p { font-size: 11px; color: var(--text-muted); }
 
-/* ── Live badge ── */
+/*   Live badge   */
 .live-badge {
   display: inline-flex; align-items: center; gap: 5px;
   padding: 3px 8px; border-radius: var(--radius-sm);
@@ -303,7 +303,6 @@ body {
 }
 @keyframes pulse-live { 0%,100%{opacity:1;} 50%{opacity:0.4;} }
 
-/* ── Sidebar bottom stats ── */
 .sidebar-stats {
   margin-top: auto; padding: 12px;
   border-top: 1px solid var(--border);
@@ -316,7 +315,7 @@ body {
 .sidebar-stat-label { font-size: 9px; color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.3px; }
 .sidebar-stat-value { font-size: 17px; font-weight: 700; margin-top: 1px; }
 
-/* ── Defect type chips ── */
+/*   Defect type chips   */
 .class-grid {
   display: grid; grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)); gap: 8px;
 }
@@ -331,7 +330,7 @@ body {
 .class-chip-count { font-size: 16px; font-weight: 700; line-height: 1; }
 .class-chip-label { font-size: 10px; color: var(--text-muted); text-transform: capitalize; margin-top: 1px; }
 
-/* ── Spinner ── */
+/*   Spinner    */
 .spinner {
   width: 16px; height: 16px; border: 1.5px solid var(--border);
   border-top-color: var(--text-muted); border-radius: 50%;
@@ -350,10 +349,10 @@ body {
 }
 @keyframes slideIn { from{transform:translateX(110%);opacity:0;} to{transform:translateX(0);opacity:1;} }
 .toast.success { border-left: 2px solid var(--green); }
-.toast.error   { border-left: 2px solid var(--red); }
-.toast.info    { border-left: 2px solid var(--accent-blue); }
-.toast-icon    { font-size: 14px; flex-shrink: 0; }
-.toast-title   { font-size: 12px; font-weight: 500; }
+.toast.error { border-left: 2px solid var(--red); }
+.toast.info { border-left: 2px solid var(--accent-blue); }
+.toast-icon { font-size: 14px; flex-shrink: 0; }
+.toast-title { font-size: 12px; font-weight: 500; }
 
 /* ── Empty state ── */
 .empty-state { text-align: center; padding: 48px 16px; color: var(--text-muted); }

@@ -1,11 +1,10 @@
  
 import base64
-import json
-import requests
 import cv2
+import requests
 
 
-SERVER_URL = "http://localhost:8000"   
+SERVER_URL = "http://localhost:8000"
 
 
 def upload_report(
@@ -14,22 +13,25 @@ def upload_report(
     confidence: float,
     lat: float = None,
     lon: float = None,
-    frame=None,         
-    bbox: tuple = None,   
+    frame=None,           
+    image_b64: str = None,   
+    bbox: tuple = None,
     source: str = "edge",
 ):
     """
-    Send a detection report to the server.
-    Optionally includes the annotated frame as base64 JPEG.
+    Send a detection report to the SmartRoad server.
+    Pass either:
+      - frame (numpy array) → encoded to JPEG here
+      - image_b64 (str)     → already encoded, sent as-is (faster)
     """
     payload = {
-        "class_id": class_id,
+        "class_id":   class_id,
         "class_name": class_name,
         "confidence": round(float(confidence), 4),
-        "lat": lat,
-        "lon": lon,
-        "source": source,
-    } 
+        "lat":        lat,
+        "lon":        lon,
+        "source":     source,
+    }
 
     if bbox:
         payload["bbox_x1"] = float(bbox[0])
@@ -37,23 +39,27 @@ def upload_report(
         payload["bbox_x2"] = float(bbox[2])
         payload["bbox_y2"] = float(bbox[3])
 
-    # Encode frame as base64 JPEG
-    if frame is not None:
-        _, buf = cv2.imencode(".jpg", frame, [cv2.IMWRITE_JPEG_QUALITY, 80])
+    # Image — prefer pre-encoded b64
+    if image_b64:
+        payload["image_b64"] = image_b64
+    elif frame is not None:
+        _, buf = cv2.imencode(".jpg", frame, [cv2.IMWRITE_JPEG_QUALITY, 82])
         payload["image_b64"] = base64.b64encode(buf).decode("utf-8")
 
     try:
         resp = requests.post(
             f"{SERVER_URL}/api/report",
             json=payload,
-            timeout=5,
+            timeout=8,
         )
         resp.raise_for_status()
         data = resp.json()
-        print(f"[Upload] ✅ Report #{data['id']} — {class_name} ({confidence:.2f})")
+        print(f"[Upload] ✅ Report #{data.get('id','?')} — {class_name} ({confidence:.2f})")
         return data
     except requests.exceptions.ConnectionError:
-        print(f"[Upload] ❌ Server offline — report dropped ({class_name})")
+        print(f"[Upload] ❌ Server offline — {class_name} dropped")
+    except requests.exceptions.Timeout:
+        print(f"[Upload] ❌ Timeout — {class_name} dropped")
     except Exception as e:
         print(f"[Upload] ❌ Error: {e}")
     return None
