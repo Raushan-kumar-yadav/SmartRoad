@@ -22,12 +22,16 @@ interface TestResult {
 }
 
 interface EdgeStatus {
-  active:     boolean;
-  fps:        number;
-  lan_ip:     string | null;
-  port:       number | null;
-  gui_url:    string | null;
-  stream_url: string | null;
+  active:         boolean;
+  fps:            number;
+  lan_ip:         string | null;
+  port:           number | null;
+  gui_url:        string | null;
+  stream_url:     string | null;
+  phone_active:   boolean;
+  phone_source:   string | null;
+  current_source: string | null;
+  model_ready:    boolean;
 }
 
 // Camera presets
@@ -127,6 +131,31 @@ export default function SettingsPage() {
     setScanning(false);
   }
 
+  async function switchCamera(newSource: string, newLabel: string) {
+    // 1. Send hot-swap request to edge (no restart needed)
+    try {
+      await fetch(`${API}/api/live/switch-camera`, {
+        method:  'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body:    JSON.stringify({ source: newSource }),
+      });
+    } catch { /* edge may be offline, still update config */ }
+    // 2. Persist to config
+    setSource(newSource);
+    setLabel(newLabel);
+    setTestResult(null);
+    // Also auto-save
+    try {
+      await fetch(`${API}/api/config`, {
+        method:  'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body:    JSON.stringify({ cameraSource: newSource, cameraLabel: newLabel }),
+      });
+    } catch { /**/ }
+    setSaved(true);
+    setTimeout(() => setSaved(false), 2000);
+  }
+
   async function testCamera() {
     setTesting(true);
     setTestResult(null);
@@ -195,20 +224,25 @@ export default function SettingsPage() {
                 <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 2 }}>Select a preset or enter a custom URL</div>
               </div>
 
-              {/* ── Select Main Camera (live scan) ── */}
+              {/* ── Select Main Camera ── */}
               <div style={{ padding: '12px 14px', borderBottom: '1px solid var(--border)' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
                   <span style={{ fontSize: 12, fontWeight: 600 }}>📸 Select Main Camera</span>
+                  {edgeStatus?.current_source && (
+                    <span style={{ fontSize: 10, color: 'var(--text-dim)', marginLeft: 4 }}>
+                      active: <code style={{ color: 'var(--green)', fontSize: 10 }}>{edgeStatus.current_source}</code>
+                    </span>
+                  )}
                   <button
                     className="btn btn-ghost btn-sm"
                     style={{ marginLeft: 'auto', fontSize: 11 }}
                     onClick={() => void fetchCameras()}
                     disabled={scanning || !edgeStatus?.gui_url}
-                    title={!edgeStatus?.gui_url ? 'Edge must be running to scan cameras' : 'Scan connected cameras'}
+                    title={!edgeStatus?.gui_url ? 'Edge must be running to scan' : 'Scan USB cameras'}
                   >
                     {scanning
                       ? <><span className="spinner" style={{ width: 10, height: 10 }} /> Scanning…</>
-                      : '🔍 Scan Cameras'}
+                      : '🔍 Scan USB'}
                   </button>
                 </div>
 
@@ -218,62 +252,81 @@ export default function SettingsPage() {
                   </div>
                 )}
 
-                {cameras.length > 0 && (
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                    <select
-                      value={source}
-                      onChange={e => {
-                        const cam = cameras.find(c => c.source === e.target.value);
-                        if (cam) { setSource(cam.source); setLabel(cam.label); setTestResult(null); }
-                      }}
-                      style={{
-                        width: '100%', background: 'var(--bg-popover)', border: '1px solid var(--border)',
-                        borderRadius: 'var(--radius-sm)', padding: '8px 10px', fontSize: 12,
-                        color: 'var(--text)', outline: 'none', cursor: 'pointer',
-                      }}
-                    >
-                      <option value="" disabled>— choose a camera —</option>
-                      {cameras.map(cam => (
-                        <option key={cam.index} value={cam.source}>
-                          📷 Camera {cam.index} — {cam.width}×{cam.height} @ {cam.fps} fps
-                        </option>
-                      ))}
-                    </select>
+                {/* Build merged camera list: phone first (when connected) + USB cams */}
+                {edgeStatus?.gui_url && (() => {
+                  const allCams: Array<{ source: string; label: string; icon: string; hint: string; live?: boolean }> = [];
 
-                    {/* Visual camera cards */}
-                    <div style={{ display: 'grid', gridTemplateColumns: `repeat(${Math.min(cameras.length, 3)}, 1fr)`, gap: 6, marginTop: 4 }}>
-                      {cameras.map(cam => (
-                        <button
-                          key={cam.index}
-                          onClick={() => { setSource(cam.source); setLabel(cam.label); setTestResult(null); }}
-                          style={{
-                            background:   source === cam.source ? 'rgba(34,197,94,0.08)' : 'var(--bg-popover)',
-                            border:       `1px solid ${source === cam.source ? 'rgba(34,197,94,0.4)' : 'var(--border)'}`,
-                            borderRadius: 'var(--radius-sm)', padding: '10px 8px',
-                            cursor: 'pointer', textAlign: 'center', transition: 'all 0.15s',
-                          }}
-                        >
-                          <div style={{ fontSize: 20, marginBottom: 4 }}>📷</div>
-                          <div style={{ fontSize: 11, fontWeight: 600, color: source === cam.source ? 'var(--green)' : 'var(--text)' }}>
-                            Camera {cam.index}
+                  // Phone cam — always shown when connected
+                  if (edgeStatus.phone_active && edgeStatus.phone_source) {
+                    allCams.push({
+                      source: edgeStatus.phone_source,
+                      label:  'Phone Camera',
+                      icon:   '📱',
+                      hint:   '● Connected now',
+                      live:   true,
+                    });
+                  }
+
+                  // USB cams from scan
+                  cameras.forEach(cam => {
+                    allCams.push({
+                      source: cam.source,
+                      label:  `Camera ${cam.index}`,
+                      icon:   '📷',
+                      hint:   `${cam.width}×${cam.height} @ ${cam.fps}fps`,
+                    });
+                  });
+
+                  if (allCams.length === 0) {
+                    return (
+                      <div style={{ fontSize: 11, color: 'var(--text-dim)', textAlign: 'center', padding: '8px 0' }}>
+                        {scanning ? 'Scanning…' : 'No cameras detected — tap Scan USB or connect phone'}
+                      </div>
+                    );
+                  }
+
+                  const activeSrc = edgeStatus.current_source ?? source;
+
+                  return (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                      {allCams.map(cam => {
+                        const isActive = activeSrc === cam.source || source === cam.source;
+                        return (
+                          <div key={cam.source} style={{
+                            display: 'flex', alignItems: 'center', gap: 10,
+                            background:   isActive ? 'rgba(34,197,94,0.07)' : 'var(--bg-popover)',
+                            border:       `1px solid ${isActive ? 'rgba(34,197,94,0.35)' : 'var(--border)'}`,
+                            borderRadius: 'var(--radius-sm)', padding: '9px 12px',
+                            transition:   'all 0.15s',
+                          }}>
+                            <span style={{ fontSize: 18 }}>{cam.icon}</span>
+                            <div style={{ flex: 1, minWidth: 0 }}>
+                              <div style={{ fontSize: 12, fontWeight: 600, color: isActive ? 'var(--green)' : 'var(--text)' }}>
+                                {cam.label}
+                                {cam.live && (
+                                  <span style={{ marginLeft: 6, fontSize: 9, padding: '1px 5px', borderRadius: 999,
+                                    background: 'rgba(34,197,94,0.15)', color: 'var(--green)', fontWeight: 700 }}>LIVE</span>
+                                )}
+                              </div>
+                              <div style={{ fontSize: 10, color: 'var(--text-dim)', marginTop: 1 }}>{cam.hint}</div>
+                            </div>
+                            {isActive ? (
+                              <span style={{ fontSize: 10, color: 'var(--green)', fontWeight: 700, flexShrink: 0 }}>✓ Active</span>
+                            ) : (
+                              <button
+                                className="btn btn-ghost btn-sm"
+                                style={{ fontSize: 10, flexShrink: 0 }}
+                                onClick={() => void switchCamera(cam.source, cam.label)}
+                              >
+                                Switch →
+                              </button>
+                            )}
                           </div>
-                          <div style={{ fontSize: 9, color: 'var(--text-dim)', marginTop: 2 }}>
-                            {cam.width}×{cam.height}
-                          </div>
-                          {source === cam.source && (
-                            <div style={{ fontSize: 9, color: 'var(--green)', marginTop: 2 }}>✓ Selected</div>
-                          )}
-                        </button>
-                      ))}
+                        );
+                      })}
                     </div>
-                  </div>
-                )}
-
-                {cameras.length === 0 && !scanning && edgeStatus?.gui_url && (
-                  <div style={{ fontSize: 11, color: 'var(--text-dim)', textAlign: 'center', padding: '8px 0' }}>
-                    No cameras detected yet — tap Scan Cameras
-                  </div>
-                )}
+                  );
+                })()}
               </div>
 
               {/* Presets */}

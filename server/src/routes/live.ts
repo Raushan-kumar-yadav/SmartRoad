@@ -74,6 +74,27 @@ router.get("/live/cameras", async (_req: Request, res: Response) => {
   }).on("error", () => res.status(503).json({ cameras: [], error: "Edge unreachable" }));
 });
 
+// POST /api/live/switch-camera — hot-swap edge camera source (no restart needed)
+router.post("/live/switch-camera", async (req: Request, res: Response) => {
+  const alive = await checkPiAlive();
+  if (!alive) { res.status(503).json({ ok: false, error: "Edge offline" }); return; }
+  const body   = JSON.stringify(req.body);
+  const piReq  = https.request(
+    { hostname: PI_HOST, port: PI_PORT, path: "/switch-camera",
+      method: "POST", ...TLS_OPTS,
+      headers: { "Content-Type": "application/json", "Content-Length": Buffer.byteLength(body) },
+    },
+    (piRes) => {
+      res.setHeader("Content-Type", "application/json");
+      res.setHeader("Access-Control-Allow-Origin", "*");
+      piRes.pipe(res);
+    }
+  );
+  piReq.on("error", () => res.status(503).json({ ok: false, error: "Edge unreachable" }));
+  piReq.write(body);
+  piReq.end();
+});
+
 // GET /api/live/stream — MJPEG proxy (infinite stream, no timeout)
 router.get("/live/stream", (req: Request, res: Response) => {
   const piReq = piGet(

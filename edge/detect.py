@@ -1,35 +1,4 @@
-"""
-SmartRoad — Edge Detection Engine
-===================================
-Pipeline:
-  Camera (phone/Pi/webcam/RTSP/video file)
-    └─► Frame buffer (thread-safe)
-          ├─► YOLO inference thread  ──► upload_report → server → DB → notify
-          └─► MJPEG stream thread    ──► /stream endpoint → dashboard Live tab
-
-Camera sources:
-  0           = local webcam
-  1,2,...     = USB camera index
-  "http://..."  = IP Webcam (Android) or DroidCam
-  "rtsp://..."  = RTSP stream (any IP camera)
-  "video.mp4"   = video file (for testing)
-
-Usage:
-  # Webcam
-  python -m edge.detect
-
-  # Android phone via IP Webcam app (free on Play Store)
-  python -m edge.detect --source "http://192.168.1.42:8080/video"
-
-  # DroidCam
-  python -m edge.detect --source "http://192.168.1.42:4747/video"
-
-  # RTSP
-  python -m edge.detect --source "rtsp://user:pass@192.168.1.42/stream"
-
-  # Custom model + server
-  python -m edge.detect --model path/to/best.pt --server http://my-server.com
-"""
+ 
 
 import argparse
 import base64
@@ -61,16 +30,16 @@ import edge.uploader as uploader
 
 
 #   Config  
-DEFAULT_MODEL   = r"e:\Pothole\pretrained\rdd\best.pt"
+DEFAULT_MODEL = r"e:\Pothole\pretrained\rdd\best.pt"
 CONFIDENCE = 0.35
-INFER_EVERY_N = 5        # run YOLO every N frames (saves CPU on Pi)
-COOLDOWN_SEC = 3.0      # min seconds between uploads of same defect class
+INFER_EVERY_N = 5       
+COOLDOWN_SEC = 3.0      
 STREAM_PORT = 8080
-STREAM_FPS = 15       # max MJPEG stream fps
-STREAM_WIDTH     = 640
-STREAM_HEIGHT   = 360
-STREAM_QUALITY  = 72       # JPEG quality for stream (0–100)
-UPLOAD_QUALITY  = 82       # JPEG quality for server upload
+STREAM_FPS = 15        
+STREAM_WIDTH = 640
+STREAM_HEIGHT = 360
+STREAM_QUALITY  = 72       
+UPLOAD_QUALITY  = 82     
 
 # SmartRoad class map
 SMARTROAD_CLASSES = {
@@ -94,18 +63,20 @@ CLASS_COLORS = {
     "garbage_dump": (0, 128, 0), "waterlogging": (255, 255, 0),
 }
 
-#   Shared state (thread-safe)  
+#   Shared state 
 _frame_lock = threading.Lock()
-_latest_jpeg      = None          # bytes — latest JPEG for MJPEG stream
-_model            = None          # loaded YOLO model (set after run() loads it)
+_latest_jpeg = None         
+_model = None           
 _stream_meta     = {
     "active": False, "fps": 0.0, "lat": None, "lon": None,
     "reports_sent": 0, "detections": [],
     "frame_count": 0, "start_time": time.time(),
     "lan_ip": None, "port": None, "gui_url": None, "stream_url": None,
-    "server_url": None,          # so mobile UI knows where to upload reports
+    "server_url": None,         
 }
-_upload_queue    = queue.Queue(maxsize=20)   # (payload_dict) — async uploads
+_upload_queue = queue.Queue(maxsize=20)    
+_phone_last_seen = 0.0     
+_switch_source   = None   
 
 
 #   Frame drawing  
@@ -251,23 +222,28 @@ class MJPEGHandler(BaseHTTPRequestHandler):
         self._json_response({"cameras": found, "cached": False})
 
     def do_POST(self):
-        """POST /analyze  — run YOLO on a submitted JPEG frame."""
+        """POST /analyze | /switch-camera"""
         try:
+            if self.path == "/switch-camera":
+                self._handle_switch_camera(); return
             if self.path != "/analyze":
                 self.send_response(404); self.end_headers(); return
 
-            global _model
+            global _model, _phone_last_seen
             if _model is None:
                 self._json_response({"error": "Model not loaded yet"}, 503); return
 
             length = int(self.headers.get("Content-Length", 0))
             body   = json.loads(self.rfile.read(length).decode())
 
+            # Track phone activity
+            _phone_last_seen = time.time()
+
             # Decode image
-            img_b64 = body.get("image_b64", "")
+            img_b64   = body.get("image_b64", "")
             img_bytes = base64.b64decode(img_b64)
-            arr = np.frombuffer(img_bytes, dtype=np.uint8)
-            frame = cv2.imdecode(arr, cv2.IMREAD_COLOR)
+            arr       = np.frombuffer(img_bytes, dtype=np.uint8)
+            frame     = cv2.imdecode(arr, cv2.IMREAD_COLOR)
             if frame is None:
                 self._json_response({"error": "Invalid image"}, 400); return
 
@@ -276,31 +252,31 @@ class MJPEGHandler(BaseHTTPRequestHandler):
             conf_thresh = float(body.get("conf", CONFIDENCE))
 
             # Run YOLO
-            results   = _model(frame, verbose=False, conf=conf_thresh)
-            boxes     = results[0].boxes
+            results = _model(frame, verbose=False, conf=conf_thresh)
+            boxes = results[0].boxes
             detections = []
             boxes_info = []
 
             for box in boxes:
                 cls_id = int(box.cls[0])
-                name   = _model.names.get(cls_id, str(cls_id))
+                name = _model.names.get(cls_id, str(cls_id))
                 conf_v = float(box.conf[0])
                 x1, y1, x2, y2 = map(int, box.xyxy[0])
                 detections.append({
-                    "class":      name,
+                    "class": name,
                     "confidence": round(conf_v, 3),
-                    "bbox":       [x1, y1, x2, y2],
+                    "bbox": [x1, y1, x2, y2],
                 })
                 boxes_info.append(((x1, y1, x2, y2), name, conf_v))
 
             # Draw + return annotated image
-            annotated = draw_detections(frame, boxes_info, lat=lat, lon=lon)
-            _, buf = cv2.imencode(".jpg", annotated, [cv2.IMWRITE_JPEG_QUALITY, 80])
+            annotated     = draw_detections(frame, boxes_info, lat=lat, lon=lon)
+            _, buf        = cv2.imencode(".jpg", annotated, [cv2.IMWRITE_JPEG_QUALITY, 80])
             annotated_b64 = base64.b64encode(buf).decode()
 
             self._json_response({
-                "detections":     detections,
-                "annotated_b64":  annotated_b64,
+                "detections":    detections,
+                "annotated_b64": annotated_b64,
                 "lat": lat, "lon": lon,
             })
 
@@ -311,6 +287,21 @@ class MJPEGHandler(BaseHTTPRequestHandler):
                 self._json_response({"error": str(e)}, 500)
             except Exception:
                 pass
+
+    def _handle_switch_camera(self):
+        """POST /switch-camera {"source": "0"} — hot-swap the edge camera."""
+        global _switch_source
+        try:
+            length = int(self.headers.get("Content-Length", 0))
+            body   = json.loads(self.rfile.read(length).decode())
+            new_src = str(body.get("source", "")).strip()
+            if not new_src:
+                self._json_response({"error": "source required"}, 400); return
+            _switch_source = new_src
+            print(f"[Switch] Camera switch requested → {new_src!r}")
+            self._json_response({"ok": True, "source": new_src})
+        except Exception as e:
+            self._json_response({"error": str(e)}, 500)
 
     def _json_response(self, data: dict, status: int = 200):
         body = json.dumps(data).encode()
@@ -364,15 +355,14 @@ class MJPEGHandler(BaseHTTPRequestHandler):
                     )
                     self.wfile.flush()
                 else:
-                    # No frame yet — send an MJPEG keepalive comment so the
-                    # connection stays alive in browsers and Node.js proxy
+                     
                     ticks += 1
                     if ticks % heartbeat_every == 0:
                         self.wfile.write(b"--frame\r\n\r\n")
                         self.wfile.flush()
                 time.sleep(interval)
             except (BrokenPipeError, ConnectionAbortedError, ConnectionResetError, OSError):
-                break  # client disconnected — exit cleanly
+                break   
 
     def _serve_info(self):
         try:
@@ -382,6 +372,14 @@ class MJPEGHandler(BaseHTTPRequestHandler):
             self.end_headers()
             with _frame_lock:
                 data = dict(_stream_meta)
+             
+            phone_active = (time.time() - _phone_last_seen) < 10   
+            lan_ip = data.get("lan_ip") or "localhost"
+            port   = data.get("port")   or 8080
+            data["phone_active"]  = phone_active
+            data["phone_source"]  = f"https://{lan_ip}:{port}/" if phone_active else None
+            data["current_source"] = _switch_source or data.get("current_source", "0")
+            data["model_ready"]   = _model is not None
             self.wfile.write(json.dumps(data).encode())
         except (BrokenPipeError, ConnectionAbortedError, ConnectionResetError):
             pass
@@ -618,24 +616,57 @@ def run(args):
     print(f"[Detect] Preview: {'YES' if args.preview else 'NO (headless)'}")
     print("[Detect] Press Ctrl+C to stop\n")
 
-    # ── Mobile-only mode: no local camera, just serve /analyze ────────────────
+    # ── Mobile-only mode: no local camera, just serve /analyze / wait for switch
     if cap is None:
         print("[Detect] 📱 Mobile-only mode — YOLO available via POST https://...8080/analyze")
-        print("[Detect]    Open your phone browser → accept cert → press Start")
+        print("[Detect]    Open phone browser → accept cert → press Start")
+        print("[Detect]    Or switch source via Settings → camera dropdown")
+        current_source = "mobile"
         try:
             while True:
-                time.sleep(1)
+                if _switch_source is not None:
+                    print(f"[Switch] Switching from mobile to {_switch_source!r}")
+                    break   # exit mobile loop → fall through to camera loop below
+                time.sleep(0.5)
         except KeyboardInterrupt:
             print("\n[Detect] Stopped")
-        finally:
             _upload_queue.put(None)
-        return
+            return
 
-    FAIL_LIMIT    = 30    # give up after N consecutive read failures
-    fail_streak   = 0
+        # Hot-swap was requested — open new camera and fall through to detect loop
+        new_src = _switch_source
+        globals()['_switch_source'] = None
+        try:
+            cap = _open_camera(new_src)
+        except RuntimeError as e:
+            print(f"[Switch] Cannot open {new_src!r}: {e} — staying in mobile mode")
+            _upload_queue.put(None)
+            return
+
+    FAIL_LIMIT  = 30
+    fail_streak = 0
+    current_source = str(args.source)
+    with _frame_lock:
+        _stream_meta["current_source"] = current_source
 
     try:
         while True:
+            # ── Hot-swap camera if requested from /switch-camera endpoint ────────
+            if _switch_source is not None:
+                new_src = _switch_source
+                globals()['_switch_source'] = None
+                print(f"[Switch] → Switching camera: {current_source!r} → {new_src!r}")
+                try:
+                    cap.release()
+                    cap = _open_camera(new_src)
+                    current_source = new_src
+                    fail_streak = 0
+                    with _frame_lock:
+                        _stream_meta["current_source"] = current_source
+                    print(f"[Switch] ✔ Camera switched to {new_src!r}")
+                except RuntimeError as e:
+                    print(f"[Switch] ✖ Cannot open {new_src!r}: {e} — keeping old source")
+
             ret, raw_frame = cap.read()
             if not ret:
                 fail_streak += 1

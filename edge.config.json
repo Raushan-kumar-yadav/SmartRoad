@@ -1,10 +1,10 @@
-﻿{
-    "cameraSource":  "0",
-    "cameraLabel":  "USB Webcam (index 0)",
-    "uploadEnabled":  true,
-    "confidence":  0.35,
-    "modelPath":  "e:\\Pothole\\pretrained\\rdd\\best.pt",
-    "streamPort":  8080,
-    "updatedAt":  "2026-09-19T14:30:20.5757494+05:30",
-    "inferEvery":  5
+{
+  "cameraSource": "http://192.168.1.x:8080/video",
+  "cameraLabel": "IP Webcam (Phone)",
+  "modelPath": "e:\\Pothole\\pretrained\\rdd\\best.pt",
+  "confidence": 0.35,
+  "inferEvery": 5,
+  "streamPort": 8080,
+  "uploadEnabled": true,
+  "updatedAt": "2026-09-19T09:06:22.333Z"
 }

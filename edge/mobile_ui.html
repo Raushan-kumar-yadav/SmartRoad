@@ -1,132 +1,124 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
 <title>SmartRoad Edge</title>
 <style>
-  *{box-sizing:border-box;margin:0;padding:0}
-  body{background:#09090b;color:#fafafa;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;min-height:100dvh;display:flex;flex-direction:column;overscroll-behavior:none}
-  header{display:flex;align-items:center;justify-content:space-between;padding:12px 16px;border-bottom:1px solid #27272a;background:#09090b;position:sticky;top:0;z-index:10}
-  .logo{font-size:15px;font-weight:700;letter-spacing:-.3px}
-  .dot{width:8px;height:8px;border-radius:50%;background:#3f3f46;display:inline-block;margin-right:5px;transition:background .3s}
+  *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+  body{background:#09090b;color:#fafafa;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;height:100dvh;display:flex;flex-direction:column;overflow:hidden;overscroll-behavior:none}
+  header{display:flex;align-items:center;justify-content:space-between;padding:10px 14px;border-bottom:1px solid #27272a;background:#09090b;flex-shrink:0}
+  .logo{font-size:14px;font-weight:700}
+  .dot{width:8px;height:8px;border-radius:50%;background:#3f3f46;display:inline-block;margin-right:4px;transition:background .3s}
   .dot.live{background:#22c55e;box-shadow:0 0 0 3px rgba(34,197,94,.25);animation:pulse 2s infinite}
-  @keyframes pulse{0%,100%{box-shadow:0 0 0 3px rgba(34,197,94,.25)}50%{box-shadow:0 0 0 7px rgba(34,197,94,.05)}}
-  .badge{font-size:10px;font-weight:600;padding:2px 8px;border-radius:999px;border:1px solid #27272a;color:#71717a}
+  @keyframes pulse{0%,100%{box-shadow:0 0 0 3px rgba(34,197,94,.25)}50%{box-shadow:0 0 0 6px rgba(34,197,94,.05)}}
+  .badge{font-size:10px;font-weight:600;padding:2px 7px;border-radius:999px;border:1px solid #27272a;color:#71717a}
   .badge.live{border-color:rgba(34,197,94,.3);color:#22c55e;background:rgba(34,197,94,.08)}
 
-  /* permission / model loading overlay */
-  #overlay{position:fixed;inset:0;background:#09090b;z-index:50;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:32px;gap:20px}
+  /* Overlay / permission screen */
+  #overlay{position:fixed;inset:0;background:#09090b;z-index:50;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:28px;gap:16px;overflow-y:auto}
   #overlay.hidden{display:none}
-  .ov-icon{font-size:48px;line-height:1}
-  .ov-title{font-size:18px;font-weight:700;text-align:center}
-  .ov-sub{font-size:13px;color:#71717a;text-align:center;line-height:1.6;max-width:280px}
-  .ov-cards{width:100%;max-width:320px;display:flex;flex-direction:column;gap:8px}
-  .ov-card{display:flex;align-items:center;gap:12px;background:#18181b;border:1px solid #27272a;border-radius:10px;padding:12px 14px}
+  .ov-icon{font-size:44px}
+  .ov-title{font-size:17px;font-weight:700}
+  .ov-sub{font-size:12px;color:#71717a;text-align:center;line-height:1.6;max-width:280px}
+  .ov-cards{width:100%;max-width:320px;display:flex;flex-direction:column;gap:7px}
+  .ov-card{display:flex;align-items:center;gap:10px;background:#18181b;border:1px solid #27272a;border-radius:10px;padding:11px 13px}
   .ov-card.ok{border-color:rgba(34,197,94,.3);background:rgba(34,197,94,.05)}
-  .ov-card.warn{border-color:rgba(245,158,11,.3);background:rgba(245,158,11,.05)}
-  .ov-card-icon{font-size:22px;flex-shrink:0}
+  .ov-card.warn{border-color:rgba(245,158,11,.3)}
+  .ov-card-icon{font-size:20px;flex-shrink:0}
   .ov-card-text{flex:1}
-  .ov-card-title{font-size:13px;font-weight:600}
-  .ov-card-sub{font-size:11px;color:#52525b;margin-top:2px}
-  .ov-status{font-size:11px;font-weight:600;padding:2px 8px;border-radius:999px;flex-shrink:0}
+  .ov-card-title{font-size:12px;font-weight:600}
+  .ov-card-sub{font-size:10px;color:#52525b;margin-top:1px}
+  .ov-status{font-size:10px;font-weight:600;padding:2px 7px;border-radius:999px;flex-shrink:0}
   .ov-status.ok{background:rgba(34,197,94,.15);color:#22c55e}
-  .ov-status.wait{background:rgba(245,158,11,.12);color:#f59e0b}
-  .ov-status.err{background:rgba(239,68,68,.12);color:#ef4444}
-  .btn-allow{width:100%;max-width:320px;padding:14px;border-radius:12px;border:none;background:#22c55e;color:#000;font-size:15px;font-weight:700;cursor:pointer;transition:all .12s}
-  .btn-allow:disabled{opacity:.4;cursor:not-allowed}
+  .ov-status.wait{background:rgba(245,158,11,.1);color:#f59e0b}
+  .ov-status.err{background:rgba(239,68,68,.1);color:#ef4444}
+  .btn-allow{width:100%;max-width:320px;padding:13px;border-radius:12px;border:none;background:#22c55e;color:#000;font-size:14px;font-weight:700;cursor:pointer}
   .btn-allow:active{transform:scale(.97)}
-  .skip-btn{font-size:11px;color:#3f3f46;background:none;border:none;cursor:pointer;margin-top:4px}
+  .btn-allow:disabled{opacity:.4;cursor:not-allowed}
+  .skip-link{font-size:11px;color:#3f3f46;background:none;border:none;cursor:pointer;padding:4px}
 
-  #preview-wrap{position:relative;width:100%;background:#000;aspect-ratio:16/9;overflow:hidden}
-  canvas{width:100%;height:100%;display:block;object-fit:cover}
-  video{display:none}
-  #no-cam{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;color:#52525b;font-size:13px}
-  #no-cam svg{width:40px;height:40px;stroke:#3f3f46}
-  .hud{position:absolute;font-size:10px;padding:3px 8px;border-radius:6px;background:rgba(0,0,0,.7);font-family:monospace}
-  #hud-fps {top:8px;right:8px;color:#a1a1aa}
-  #hud-gps {bottom:8px;left:8px;color:#a1a1aa}
-  #hud-dets{top:8px;left:8px;color:#22c55e}
-  #spinner{position:absolute;inset:0;display:none;align-items:center;justify-content:center;background:rgba(0,0,0,.45)}
-  #spinner::after{content:'';width:28px;height:28px;border:3px solid #27272a;border-top-color:#22c55e;border-radius:50%;animation:spin .7s linear infinite}
+  /* Camera */
+  #cam-wrap{position:relative;width:100%;background:#000;flex-shrink:0;aspect-ratio:16/9}
+  canvas{width:100%;height:100%;display:block}
+  video{position:absolute;opacity:0;pointer-events:none;width:1px;height:1px}
+  #no-cam{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;color:#52525b;font-size:12px}
+  #no-cam svg{width:36px;height:36px;stroke:#3f3f46}
+  /* HUD overlays */
+  .hud{position:absolute;font-size:9px;padding:2px 7px;border-radius:5px;background:rgba(0,0,0,.65);font-family:monospace;pointer-events:none}
+  #hud-fps{top:6px;right:6px;color:#a1a1aa}
+  #hud-inf{top:6px;left:6px;color:#22c55e;display:none}
+  #hud-gps{bottom:6px;left:6px;color:#a1a1aa;display:none}
+  /* Inference spinner ring */
+  #inf-ring{position:absolute;top:6px;right:36px;width:14px;height:14px;display:none}
+  #inf-ring::after{content:'';position:absolute;inset:0;border:2px solid #27272a;border-top-color:#22c55e;border-radius:50%;animation:spin .6s linear infinite}
   @keyframes spin{to{transform:rotate(360deg)}}
 
-  .controls{display:flex;gap:8px;padding:12px 14px}
-  .btn{flex:1;padding:12px;border-radius:10px;border:none;font-size:14px;font-weight:600;cursor:pointer;transition:all .12s;display:flex;align-items:center;justify-content:center;gap:6px}
-  .btn-start{background:#22c55e;color:#000}
-  .btn-start:active{background:#16a34a;transform:scale(.97)}
-  .btn-stop{background:#27272a;color:#fafafa;border:1px solid #3f3f46}
-  .btn-stop:active{background:#18181b;transform:scale(.97)}
+  /* Controls */
+  .controls{display:flex;gap:7px;padding:10px 12px;flex-shrink:0}
+  .btn{flex:1;padding:11px;border-radius:9px;border:none;font-size:13px;font-weight:600;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:5px;transition:all .1s}
+  .btn-start{background:#22c55e;color:#000}.btn-start:active{background:#16a34a;transform:scale(.97)}
+  .btn-stop{background:#27272a;color:#fafafa;border:1px solid #3f3f46}.btn-stop:active{background:#18181b;transform:scale(.97)}
   .btn:disabled{opacity:.35;cursor:not-allowed}
-  .btn-flip{background:#18181b;border:1px solid #27272a;color:#a1a1aa;flex:0 0 48px;padding:0;font-size:20px}
+  .btn-flip{background:#18181b;border:1px solid #27272a;color:#a1a1aa;flex:0 0 44px;padding:0;font-size:18px}
 
-  .stats{display:grid;grid-template-columns:repeat(4,1fr);gap:1px;background:#27272a;border-top:1px solid #27272a;border-bottom:1px solid #27272a}
-  .stat{background:#09090b;padding:10px 12px}
+  /* Stats */
+  .stats{display:grid;grid-template-columns:repeat(4,1fr);gap:1px;background:#27272a;border-top:1px solid #27272a;border-bottom:1px solid #27272a;flex-shrink:0}
+  .stat{background:#09090b;padding:8px 10px}
   .stat-label{font-size:9px;color:#52525b;font-weight:600;text-transform:uppercase;letter-spacing:.4px}
-  .stat-value{font-size:16px;font-weight:700;margin-top:2px;font-family:monospace}
+  .stat-value{font-size:15px;font-weight:700;margin-top:1px;font-family:monospace}
   .stat-value.g{color:#22c55e}
 
-  .detections{flex:1;overflow-y:auto;padding:10px 14px;display:flex;flex-direction:column;gap:6px}
-  .det-hdr{font-size:10px;color:#52525b;font-weight:600;text-transform:uppercase;letter-spacing:.5px;margin-bottom:2px}
-  .det-item{display:flex;align-items:center;justify-content:space-between;background:#18181b;border:1px solid #27272a;border-radius:8px;padding:9px 11px;animation:fadein .2s}
-  @keyframes fadein{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:none}}
-  .det-name{font-size:13px;font-weight:600}
-  .det-right{display:flex;align-items:center;gap:8px}
-  .det-conf{font-size:12px;font-family:monospace;font-weight:600}
-  .det-upload{font-size:10px;padding:2px 7px;border-radius:999px;background:rgba(34,197,94,.1);border:1px solid rgba(34,197,94,.2);color:#22c55e;cursor:pointer;user-select:none}
-  .empty{color:#3f3f46;font-size:13px;text-align:center;padding:16px}
+  /* Detections */
+  .detections{flex:1;overflow-y:auto;padding:8px 12px;display:flex;flex-direction:column;gap:5px;-webkit-overflow-scrolling:touch}
+  .det-hdr{font-size:9px;color:#52525b;font-weight:600;text-transform:uppercase;letter-spacing:.5px;margin-bottom:1px}
+  .det-item{display:flex;align-items:center;justify-content:space-between;background:#18181b;border:1px solid #27272a;border-radius:7px;padding:8px 10px;animation:fadein .2s}
+  @keyframes fadein{from{opacity:0;transform:translateY(3px)}to{opacity:1;transform:none}}
+  .det-name{font-size:12px;font-weight:600}
+  .det-right{display:flex;align-items:center;gap:7px}
+  .det-conf{font-size:11px;font-family:monospace;font-weight:600}
   .conf-hi{color:#22c55e}.conf-med{color:#f59e0b}.conf-lo{color:#ef4444}
+  .det-upload{font-size:10px;padding:2px 6px;border-radius:999px;background:rgba(34,197,94,.1);border:1px solid rgba(34,197,94,.2);color:#22c55e;cursor:pointer}
+  .empty{color:#3f3f46;font-size:12px;text-align:center;padding:12px}
 
-  .footer{padding:10px 14px;font-size:10px;color:#3f3f46;border-top:1px solid #18181b;display:flex;justify-content:space-between}
-  #upload-toast{position:fixed;bottom:20px;left:50%;transform:translateX(-50%) translateY(60px);background:#22c55e;color:#000;font-size:12px;font-weight:600;padding:8px 18px;border-radius:999px;opacity:0;transition:all .3s;pointer-events:none;z-index:100}
-  #upload-toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+  #toast{position:fixed;bottom:16px;left:50%;transform:translateX(-50%) translateY(50px);background:#22c55e;color:#000;font-size:11px;font-weight:600;padding:7px 16px;border-radius:999px;opacity:0;transition:all .25s;pointer-events:none;z-index:200}
+  #toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
 </style>
 </head>
 <body>
 
-<!-- Permission / model loading overlay -->
+<!-- Permission screen -->
 <div id="overlay">
-  <div class="ov-icon">&#x1F6E3;</div>
+  <div class="ov-icon">🛣</div>
   <div class="ov-title">SmartRoad Edge</div>
-  <div class="ov-sub">This app needs camera and location access to detect road defects.</div>
-
+  <div class="ov-sub">Allow camera and location to detect road defects.</div>
   <div class="ov-cards">
     <div class="ov-card" id="card-cam">
-      <div class="ov-card-icon">&#x1F4F7;</div>
-      <div class="ov-card-text">
-        <div class="ov-card-title">Camera</div>
-        <div class="ov-card-sub">Capture road footage for AI analysis</div>
-      </div>
+      <div class="ov-card-icon">📷</div>
+      <div class="ov-card-text"><div class="ov-card-title">Camera</div><div class="ov-card-sub">Capture road footage for AI</div></div>
       <div class="ov-status wait" id="cam-status">Waiting</div>
     </div>
     <div class="ov-card" id="card-gps">
-      <div class="ov-card-icon">&#x1F4CD;</div>
-      <div class="ov-card-text">
-        <div class="ov-card-title">Location (GPS)</div>
-        <div class="ov-card-sub">Tag detections with coordinates</div>
-      </div>
+      <div class="ov-card-icon">📍</div>
+      <div class="ov-card-text"><div class="ov-card-title">Location (GPS)</div><div class="ov-card-sub">Tag detections with coordinates</div></div>
       <div class="ov-status wait" id="gps-status">Waiting</div>
     </div>
     <div class="ov-card" id="card-model">
-      <div class="ov-card-icon">&#x1F9E0;</div>
-      <div class="ov-card-text">
-        <div class="ov-card-title">YOLO Model</div>
-        <div class="ov-card-sub">Server-side AI — loading...</div>
-      </div>
+      <div class="ov-card-icon">🧠</div>
+      <div class="ov-card-text"><div class="ov-card-title">YOLO Model</div><div class="ov-card-sub" id="model-sub">Checking server…</div></div>
       <div class="ov-status wait" id="model-status">Loading</div>
     </div>
   </div>
-
-  <button class="btn-allow" id="btn-allow" onclick="requestPermissions()">Allow &amp; Start</button>
-  <button class="skip-btn" onclick="dismissOverlay()">Skip &rarr; continue without GPS</button>
+  <button class="btn-allow" id="btn-allow" onclick="requestPerms()">Allow &amp; Start</button>
+  <button class="skip-link" onclick="dismissOverlay()">Skip → continue without GPS</button>
 </div>
 
 <header>
-  <div class="logo">&#x1F6E3; SmartRoad Edge</div>
-  <div><span class="dot" id="dot"></span><span class="badge" id="badge">Offline</span></div>
+  <div class="logo">🛣 SmartRoad Edge</div>
+  <div><span class="dot" id="dot"></span><span class="badge" id="badge">Stopped</span></div>
 </header>
 
-<div id="preview-wrap">
+<div id="cam-wrap">
   <canvas id="canvas"></canvas>
   <video id="video" autoplay playsinline muted></video>
   <div id="no-cam">
@@ -135,278 +127,314 @@
     </svg>
     <span id="no-cam-msg">Press Start</span>
   </div>
-  <div class="hud" id="hud-dets" style="display:none"></div>
-  <div class="hud" id="hud-fps"  style="display:none">-- fps</div>
-  <div class="hud" id="hud-gps"  style="display:none">GPS...</div>
-  <div id="spinner"></div>
+  <div class="hud" id="hud-fps" style="display:none">-- fps</div>
+  <div class="hud" id="hud-inf" id="hud-inf"></div>
+  <div class="hud" id="hud-gps"></div>
+  <div id="inf-ring"></div>
 </div>
 
 <div class="controls">
-  <button class="btn btn-start" id="btn-start" onclick="startCam()">&#x25B6; Start</button>
-  <button class="btn btn-flip"  onclick="flipCam()" title="Flip camera">&#x21C6;</button>
-  <button class="btn btn-stop"  id="btn-stop"  onclick="stopCam()" disabled>&#x25A0; Stop</button>
+  <button class="btn btn-start" id="btn-start" onclick="startCam()">▶ Start</button>
+  <button class="btn btn-flip"  onclick="flipCam()" title="Flip">⇆</button>
+  <button class="btn btn-stop"  id="btn-stop"  onclick="stopCam()" disabled>■ Stop</button>
 </div>
 
 <div class="stats">
-  <div class="stat"><div class="stat-label">FPS</div><div class="stat-value"  id="sv-fps">-</div></div>
+  <div class="stat"><div class="stat-label">FPS</div><div class="stat-value"   id="sv-fps">-</div></div>
   <div class="stat"><div class="stat-label">Dets</div><div class="stat-value g" id="sv-dets">0</div></div>
   <div class="stat"><div class="stat-label">Sent</div><div class="stat-value g" id="sv-sent">0</div></div>
-  <div class="stat"><div class="stat-label">Model</div><div class="stat-value" id="sv-model" style="font-size:10px;padding-top:4px">loading...</div></div>
+  <div class="stat"><div class="stat-label">Model</div><div class="stat-value"  id="sv-model" style="font-size:9px;padding-top:5px">-</div></div>
 </div>
 
 <div class="detections">
-  <div class="det-hdr">Live Detections &mdash; <span id="payload-note" style="color:#3f3f46;font-weight:400">POST /analyze: {image_b64, conf, lat, lon}</span></div>
+  <div class="det-hdr">Live Detections</div>
   <div id="det-list"><div class="empty">No detections yet</div></div>
 </div>
 
-<div class="footer">
-  <span id="gps-text">GPS: waiting...</span>
-  <span id="server-text">Server: -</span>
-</div>
-
-<div id="upload-toast">&#x2714; Uploaded!</div>
+<div id="toast"></div>
 
 <script>
-  // ── Config ─────────────────────────────────────────────────────────────────
-  const ANALYZE_FPS    = 3;
-  const CONF_THRESHOLD = 0.35;
-  const CAPTURE_W      = 640;
-  const CAPTURE_H      = 480;
-  const JPEG_QUALITY   = 0.82;
+// ── Config ────────────────────────────────────────────────────────────────────
+const CONF      = 0.35;
+const JPEG_Q    = 0.80;
+const CAP_W     = 640;
+const CAP_H     = 480;
+const INFER_MS  = 800;   // min ms between inference calls (avoids stacking)
 
-  // ── State ──────────────────────────────────────────────────────────────────
-  let stream    = null;
-  let loopId    = null;
-  let facing    = 'environment';
-  let lastT     = 0;
-  let gpsPos    = null;
-  let sentCount = 0;
-  let busy      = false;
-  let serverUrl = '';
-  let camGranted = false;
-  let gpsGranted = false;
+// ── State ─────────────────────────────────────────────────────────────────────
+let stream      = null;
+let facing      = 'environment';
+let gpsPos      = null;
+let serverUrl   = '';
+let sentCount   = 0;
+let inferBusy   = false;
+let inferTimer  = null;
+let rafId       = null;
+let lastFpsT    = 0;
+let frameCount  = 0;
 
-  const video  = document.getElementById('video');
-  const canvas = document.getElementById('canvas');
-  const ctx    = canvas.getContext('2d');
-  const noCam  = document.getElementById('no-cam');
+// Detection overlay data (drawn on every RAF frame)
+let boxes       = [];   // [{x1,y1,x2,y2,label,conf}]
 
-  // ── Check model status on load ─────────────────────────────────────────────
-  async function refreshInfo() {
-    try {
-      const d = await fetch('/info').then(r => r.json());
-      if (d.server_url) {
-        serverUrl = d.server_url;
-        document.getElementById('server-text').textContent = 'Server: ' + serverUrl;
-      }
-      const ready = d.gui_url != null;
-      document.getElementById('sv-model').textContent     = ready ? 'ready' : 'loading...';
-      document.getElementById('model-status').textContent = ready ? 'Ready' : 'Loading';
-      document.getElementById('model-status').className   = 'ov-status ' + (ready ? 'ok' : 'wait');
-      document.getElementById('card-model').className     = 'ov-card ' + (ready ? 'ok' : '');
-    } catch {
-      document.getElementById('sv-model').textContent = 'offline';
+const video  = document.getElementById('video');
+const canvas = document.getElementById('canvas');
+const ctx    = canvas.getContext('2d');
+
+// ── 1. DISPLAY LOOP — smooth 60fps, draws video + overlay boxes ───────────────
+function displayLoop() {
+  rafId = requestAnimationFrame(displayLoop);
+  if (!stream || video.readyState < 2) return;
+
+  // Draw live video frame
+  ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+
+  // Draw detection boxes on top (from last YOLO response)
+  if (boxes.length > 0) {
+    const sx = canvas.width  / CAP_W;
+    const sy = canvas.height / CAP_H;
+    ctx.lineWidth   = 2;
+    ctx.font        = 'bold 12px monospace';
+    ctx.shadowColor = 'rgba(0,0,0,0.8)';
+    ctx.shadowBlur  = 3;
+    for (const b of boxes) {
+      const col = b.conf >= 0.7 ? '#22c55e' : b.conf >= 0.5 ? '#f59e0b' : '#ef4444';
+      ctx.strokeStyle = col;
+      ctx.strokeRect(b.x1*sx, b.y1*sy, (b.x2-b.x1)*sx, (b.y2-b.y1)*sy);
+      ctx.fillStyle = col;
+      ctx.fillText(`${b.label} ${(b.conf*100).toFixed(0)}%`, b.x1*sx+3, b.y1*sy-4);
     }
-  }
-  refreshInfo();
-  setInterval(refreshInfo, 3000);
-
-  // ── Permission onboarding ──────────────────────────────────────────────────
-  async function requestPermissions() {
-    document.getElementById('btn-allow').disabled = true;
-    document.getElementById('btn-allow').textContent = 'Requesting...';
-
-    // 1. Camera
-    try {
-      const s = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
-      s.getTracks().forEach(t => t.stop()); // just checking permission
-      camGranted = true;
-      setCard('card-cam', 'cam-status', 'ok', 'Allowed');
-    } catch (e) {
-      setCard('card-cam', 'cam-status', 'err', 'Denied');
-      document.getElementById('btn-allow').textContent = 'Camera denied — tap to retry';
-      document.getElementById('btn-allow').disabled = false;
-      return;
-    }
-
-    // 2. GPS
-    if (navigator.geolocation) {
-      navigator.geolocation.getCurrentPosition(
-        pos => {
-          gpsPos = { lat: pos.coords.latitude, lon: pos.coords.longitude };
-          gpsGranted = true;
-          setCard('card-gps', 'gps-status', 'ok', 'Allowed');
-          document.getElementById('gps-text').textContent =
-            'GPS: ' + gpsPos.lat.toFixed(5) + ', ' + gpsPos.lon.toFixed(5);
-          // Keep watching
-          navigator.geolocation.watchPosition(
-            p => { gpsPos = { lat: p.coords.latitude, lon: p.coords.longitude };
-                   document.getElementById('gps-text').textContent = 'GPS: '+gpsPos.lat.toFixed(5)+', '+gpsPos.lon.toFixed(5);
-                   document.getElementById('hud-gps').textContent = gpsPos.lat.toFixed(4)+','+gpsPos.lon.toFixed(4); },
-            () => {},
-            { enableHighAccuracy: true, maximumAge: 3000 }
-          );
-          dismissOverlay();
-        },
-        () => {
-          setCard('card-gps', 'gps-status', 'warn', 'Denied');
-          dismissOverlay(); // GPS optional — proceed anyway
-        },
-        { enableHighAccuracy: true, timeout: 8000 }
-      );
-    } else {
-      setCard('card-gps', 'gps-status', 'warn', 'N/A');
-      dismissOverlay();
-    }
+    ctx.shadowBlur = 0;
   }
 
-  function setCard(cardId, statusId, type, text) {
-    document.getElementById(cardId).className   = 'ov-card ' + (type === 'ok' ? 'ok' : type === 'warn' ? 'warn' : '');
-    document.getElementById(statusId).textContent = text;
-    document.getElementById(statusId).className   = 'ov-status ' + type;
-  }
-
-  function dismissOverlay() {
-    document.getElementById('overlay').classList.add('hidden');
-    startCam();   // auto-start after permissions granted
-  }
-
-  // ── Camera ─────────────────────────────────────────────────────────────────
-  async function startCam() {
-    document.getElementById('btn-start').disabled = true;
-    document.getElementById('no-cam-msg').textContent = 'Opening camera...';
-    try {
-      stream = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: facing, width: { ideal: CAPTURE_W }, height: { ideal: CAPTURE_H } },
-        audio: false
-      });
-      video.srcObject = stream;
-      await video.play();
-      canvas.width  = video.videoWidth  || CAPTURE_W;
-      canvas.height = video.videoHeight || CAPTURE_H;
-      noCam.style.display = 'none';
-      ['hud-fps', 'hud-gps', 'hud-dets'].forEach(id =>
-        document.getElementById(id).style.display = 'block'
-      );
-      document.getElementById('btn-stop').disabled = false;
-      document.getElementById('dot').classList.add('live');
-      document.getElementById('badge').textContent = 'Live';
-      document.getElementById('badge').classList.add('live');
-      loopId = setInterval(captureAndAnalyze, 1000 / ANALYZE_FPS);
-    } catch (e) {
-      document.getElementById('no-cam-msg').textContent = 'Camera denied: ' + e.message;
-      document.getElementById('btn-start').disabled = false;
-    }
-  }
-
-  function stopCam() {
-    if (loopId)  { clearInterval(loopId); loopId = null; }
-    if (stream)  { stream.getTracks().forEach(t => t.stop()); stream = null; }
-    noCam.style.display = 'flex';
-    document.getElementById('no-cam-msg').textContent = 'Stopped';
-    ['hud-fps', 'hud-gps', 'hud-dets'].forEach(id =>
-      document.getElementById(id).style.display = 'none'
-    );
-    document.getElementById('btn-stop').disabled  = true;
-    document.getElementById('btn-start').disabled = false;
-    document.getElementById('dot').classList.remove('live');
-    document.getElementById('badge').textContent = 'Offline';
-    document.getElementById('badge').classList.remove('live');
-    document.getElementById('sv-fps').textContent = '-';
-  }
-
-  async function flipCam() {
-    facing = facing === 'environment' ? 'user' : 'environment';
-    if (stream) { stopCam(); await startCam(); }
-  }
-
-  // ── Capture → POST /analyze (ONE JSON: image_b64 + lat + lon) ─────────────
-  async function captureAndAnalyze() {
-    if (busy || !stream || video.readyState < 2) return;
-    busy = true;
-    const now = Date.now();
-    const fps = lastT > 0 ? (1000 / (now - lastT)).toFixed(1) : '-';
-    lastT = now;
+  // FPS counter
+  frameCount++;
+  const now = performance.now();
+  if (now - lastFpsT >= 1000) {
+    const fps = (frameCount / ((now - lastFpsT) / 1000)).toFixed(1);
     document.getElementById('hud-fps').textContent = fps + ' fps';
     document.getElementById('sv-fps').textContent  = fps;
+    frameCount = 0; lastFpsT = now;
+  }
+}
 
-    ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-    const b64 = canvas.toDataURL('image/jpeg', JPEG_QUALITY).split(',')[1];
+// ── 2. INFERENCE LOOP — async, never blocks display ──────────────────────────
+async function inferLoop() {
+  if (!stream || video.readyState < 2 || inferBusy) {
+    inferTimer = setTimeout(inferLoop, 200);
+    return;
+  }
+  inferBusy = true;
+  document.getElementById('inf-ring').style.display = 'block';
+  document.getElementById('hud-inf').style.display  = 'block';
+  document.getElementById('hud-inf').textContent    = '⏳ analyzing…';
 
-    // ONE JSON object: pixel data (base64 JPEG) + GPS + conf threshold
-    const payload = {
-      image_b64: b64,           // full JPEG frame as base64 string
-      conf:      CONF_THRESHOLD,// detection threshold (server default 0.35)
-      lat:       gpsPos?.lat ?? null,  // GPS lat  (null if denied)
-      lon:       gpsPos?.lon ?? null,  // GPS lon  (null if denied)
-    };
+  // Capture current frame to off-screen canvas
+  const off = new OffscreenCanvas(CAP_W, CAP_H);
+  off.getContext('2d').drawImage(video, 0, 0, CAP_W, CAP_H);
+  const blob   = await off.convertToBlob({ type: 'image/jpeg', quality: JPEG_Q });
+  const b64    = await blobToB64(blob);
 
-    try {
-      document.getElementById('spinner').style.display = 'flex';
-      const res  = await fetch('/analyze', {
-        method:  'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body:    JSON.stringify(payload),
-      });
-      const data = await res.json();
-      if (data.error) { busy = false; return; }
-
-      if (data.annotated_b64) {
-        const img   = new Image();
-        img.onload  = () => { ctx.drawImage(img, 0, 0, canvas.width, canvas.height); busy = false; };
-        img.src     = 'data:image/jpeg;base64,' + data.annotated_b64;
-      } else { busy = false; }
-
-      const dets = data.detections || [];
-      document.getElementById('sv-dets').textContent  = dets.length;
-      document.getElementById('hud-dets').textContent = dets.length ? dets.length + ' det' : '';
-      renderDetections(dets, b64);
-    } catch (e) { busy = false; }
-    finally { document.getElementById('spinner').style.display = 'none'; }
+  try {
+    const res  = await fetch('/analyze', {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body:    JSON.stringify({ image_b64: b64, conf: CONF,
+                                lat: gpsPos?.lat ?? null, lon: gpsPos?.lon ?? null }),
+    });
+    const data = await res.json();
+    if (!data.error) {
+      // Convert detections to box overlay format
+      boxes = (data.detections || []).map(d => ({
+        x1: d.bbox[0], y1: d.bbox[1], x2: d.bbox[2], y2: d.bbox[3],
+        label: d.class, conf: d.confidence,
+      }));
+      renderDetList(data.detections || []);
+      document.getElementById('sv-dets').textContent = boxes.length;
+      document.getElementById('hud-inf').textContent = boxes.length
+        ? `${boxes.length} detection${boxes.length>1?'s':''}` : '';
+    }
+  } catch {
+    document.getElementById('hud-inf').textContent = '';
   }
 
-  function renderDetections(dets, b64) {
-    const list = document.getElementById('det-list');
-    if (!dets.length) { list.innerHTML = '<div class="empty">No detections</div>'; return; }
-    window._lastDets = dets;
-    window._lastB64  = b64;
-    list.innerHTML = dets.map((d, i) => {
-      const c = d.confidence;
-      const cls = c >= 0.7 ? 'conf-hi' : c >= 0.5 ? 'conf-med' : 'conf-lo';
-      return `<div class="det-item">
-        <span class="det-name">&#x1F6A7; ${d.class}</span>
-        <div class="det-right">
-          <span class="det-conf ${cls}">${(c * 100).toFixed(0)}%</span>
-          <span class="det-upload" onclick="uploadDetection(${i})">&#x2B06; Send</span>
-        </div>
-      </div>`;
-    }).join('');
+  document.getElementById('inf-ring').style.display = 'none';
+  inferBusy = false;
+  // Schedule next inference after INFER_MS, regardless of how long this one took
+  inferTimer = setTimeout(inferLoop, INFER_MS);
+}
+
+function blobToB64(blob) {
+  return new Promise(res => {
+    const r = new FileReader();
+    r.onload  = () => res(r.result.split(',')[1]);
+    r.readAsDataURL(blob);
+  });
+}
+
+// ── Camera ────────────────────────────────────────────────────────────────────
+async function startCam() {
+  document.getElementById('btn-start').disabled = true;
+  document.getElementById('no-cam-msg').textContent = 'Opening camera…';
+  try {
+    stream = await navigator.mediaDevices.getUserMedia({
+      video: { facingMode: facing, width: { ideal: CAP_W }, height: { ideal: CAP_H } },
+      audio: false,
+    });
+    video.srcObject = stream;
+    await video.play();
+    canvas.width  = CAP_W;
+    canvas.height = CAP_H;
+    document.getElementById('no-cam').style.display = 'none';
+    document.getElementById('hud-fps').style.display = 'block';
+    document.getElementById('btn-stop').disabled  = false;
+    document.getElementById('dot').classList.add('live');
+    document.getElementById('badge').textContent = 'Live';
+    document.getElementById('badge').classList.add('live');
+    lastFpsT = performance.now(); frameCount = 0;
+    displayLoop();   // start smooth display
+    inferLoop();     // start async inference
+  } catch (e) {
+    document.getElementById('no-cam-msg').textContent = 'Camera denied: ' + e.message;
+    document.getElementById('btn-start').disabled = false;
+  }
+}
+
+function stopCam() {
+  cancelAnimationFrame(rafId); rafId = null;
+  clearTimeout(inferTimer);    inferTimer = null;
+  if (stream) { stream.getTracks().forEach(t => t.stop()); stream = null; }
+  boxes = [];
+  document.getElementById('no-cam').style.display     = 'flex';
+  document.getElementById('no-cam-msg').textContent   = 'Stopped';
+  document.getElementById('hud-fps').style.display    = 'none';
+  document.getElementById('hud-inf').style.display    = 'none';
+  document.getElementById('inf-ring').style.display   = 'none';
+  document.getElementById('btn-stop').disabled  = true;
+  document.getElementById('btn-start').disabled = false;
+  document.getElementById('dot').classList.remove('live');
+  document.getElementById('badge').textContent = 'Stopped';
+  document.getElementById('badge').classList.remove('live');
+  document.getElementById('sv-fps').textContent  = '-';
+  document.getElementById('sv-dets').textContent = '0';
+}
+
+async function flipCam() {
+  facing = facing === 'environment' ? 'user' : 'environment';
+  if (stream) { stopCam(); await startCam(); }
+}
+
+// ── Detection list ────────────────────────────────────────────────────────────
+function renderDetList(dets) {
+  const list = document.getElementById('det-list');
+  if (!dets.length) { list.innerHTML = '<div class="empty">No detections</div>'; return; }
+  window._lastDets = dets;
+  list.innerHTML = dets.map((d, i) => {
+    const cls = d.confidence >= 0.7 ? 'conf-hi' : d.confidence >= 0.5 ? 'conf-med' : 'conf-lo';
+    return `<div class="det-item">
+      <span class="det-name">🚧 ${d.class}</span>
+      <div class="det-right">
+        <span class="det-conf ${cls}">${(d.confidence*100).toFixed(0)}%</span>
+        <span class="det-upload" onclick="upload(${i})">↑ Send</span>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+async function upload(idx) {
+  const det = (window._lastDets || [])[idx];
+  if (!det || !serverUrl) { showToast('No server URL'); return; }
+  const off = new OffscreenCanvas(CAP_W, CAP_H);
+  off.getContext('2d').drawImage(video, 0, 0, CAP_W, CAP_H);
+  const blob = await off.convertToBlob({ type:'image/jpeg', quality: 0.8 });
+  const b64  = await blobToB64(blob);
+  try {
+    await fetch(serverUrl.replace(/\/$/,'') + '/api/report', {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ class: det.class, confidence: det.confidence,
+                             bbox: det.bbox, lat: gpsPos?.lat ?? null,
+                             lon: gpsPos?.lon ?? null, source:'mobile-cam', image_b64: b64 }),
+    });
+    sentCount++;
+    document.getElementById('sv-sent').textContent = sentCount;
+    showToast('✔ Uploaded!');
+  } catch { showToast('⚠ Upload failed'); }
+}
+
+function showToast(msg) {
+  const t = document.getElementById('toast');
+  t.textContent = msg; t.classList.add('show');
+  setTimeout(() => t.classList.remove('show'), 2500);
+}
+
+// ── Permission screen ─────────────────────────────────────────────────────────
+async function requestPerms() {
+  document.getElementById('btn-allow').disabled = true;
+  document.getElementById('btn-allow').textContent = 'Requesting…';
+
+  // Camera
+  try {
+    const s = await navigator.mediaDevices.getUserMedia({ video:true, audio:false });
+    s.getTracks().forEach(t => t.stop());
+    setCard('card-cam','cam-status','ok','Allowed');
+  } catch {
+    setCard('card-cam','cam-status','err','Denied');
+    document.getElementById('btn-allow').disabled = false;
+    document.getElementById('btn-allow').textContent = 'Camera denied — retry';
+    return;
   }
 
-  async function uploadDetection(idx) {
-    const det = (window._lastDets || [])[idx];
-    if (!det || !serverUrl) { showToast('No server URL'); return; }
-    try {
-      await fetch(serverUrl.replace(/\/$/, '') + '/api/report', {
-        method:  'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body:    JSON.stringify({
-          class: det.class, confidence: det.confidence, bbox: det.bbox,
-          lat: gpsPos?.lat ?? null, lon: gpsPos?.lon ?? null,
-          source: 'mobile-cam', image_b64: window._lastB64 || null,
-        }),
-      });
-      sentCount++;
-      document.getElementById('sv-sent').textContent = sentCount;
-      showToast('&#x2714; Uploaded!');
-    } catch { showToast('&#x26A0; Upload failed'); }
+  // GPS (non-blocking)
+  if (navigator.geolocation) {
+    navigator.geolocation.getCurrentPosition(
+      pos => {
+        gpsPos = { lat: pos.coords.latitude, lon: pos.coords.longitude };
+        setCard('card-gps','gps-status','ok','Allowed');
+        document.getElementById('hud-gps').textContent = gpsPos.lat.toFixed(4)+','+gpsPos.lon.toFixed(4);
+        document.getElementById('hud-gps').style.display = 'block';
+        navigator.geolocation.watchPosition(
+          p => { gpsPos = { lat:p.coords.latitude, lon:p.coords.longitude };
+                 document.getElementById('hud-gps').textContent = gpsPos.lat.toFixed(4)+','+gpsPos.lon.toFixed(4); },
+          ()=>{}, { enableHighAccuracy:true, maximumAge:4000 }
+        );
+        dismissOverlay();
+      },
+      () => { setCard('card-gps','gps-status','warn','Skipped'); dismissOverlay(); },
+      { enableHighAccuracy:true, timeout:8000 }
+    );
+  } else {
+    setCard('card-gps','gps-status','warn','N/A');
+    dismissOverlay();
   }
+}
 
-  function showToast(msg) {
-    const t = document.getElementById('upload-toast');
-    t.innerHTML = msg; t.classList.add('show');
-    setTimeout(() => t.classList.remove('show'), 2500);
+function setCard(cardId, statusId, type, text) {
+  document.getElementById(cardId).className   = 'ov-card '+(type==='ok'?'ok':type==='warn'?'warn':'');
+  document.getElementById(statusId).textContent = text;
+  document.getElementById(statusId).className   = 'ov-status '+type;
+}
+
+function dismissOverlay() {
+  document.getElementById('overlay').classList.add('hidden');
+  startCam();
+}
+
+// ── Poll /info every 10s (not every 3s — reduces SSL handshakes) ──────────────
+async function refreshInfo() {
+  try {
+    const d = await fetch('/info').then(r => r.json());
+    if (d.server_url) serverUrl = d.server_url;
+    const ready = !!d.model_ready || d.gui_url != null;
+    document.getElementById('sv-model').textContent        = ready ? 'ready' : 'loading';
+    document.getElementById('model-status').textContent    = ready ? 'Ready' : 'Loading';
+    document.getElementById('model-status').className      = 'ov-status '+(ready?'ok':'wait');
+    document.getElementById('card-model').className        = 'ov-card '+(ready?'ok':'');
+    document.getElementById('model-sub').textContent       = ready ? 'Model loaded ✓' : 'Checking server…';
+  } catch {
+    document.getElementById('sv-model').textContent = 'offline';
   }
+}
+refreshInfo();
+setInterval(refreshInfo, 10000);  // every 10s, not 3s
 </script>
 </body>
 </html>
